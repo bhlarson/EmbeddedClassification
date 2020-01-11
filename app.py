@@ -2,19 +2,8 @@
 from importlib import import_module
 import os
 from flask import Flask, render_template, Response
+from camera_opencv import Camera
 
-# import camera driver
-if os.environ.get('CAMERA'):
-    cameraModule = 'camera_' + os.environ['CAMERA']
-    print(cameraModule)
-    Camera = import_module(cameraModule).Camera
-else:
-    print('Pi camera')
-    from camera_opencv import Camera
-    #from camera_pi import Camera
-
-# Raspberry Pi camera module (requires picamera package)
-# from camera_pi import Camera
 
 app = Flask(__name__)
 

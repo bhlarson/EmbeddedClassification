@@ -10,5 +10,5 @@ class Camera(BaseCamera):
     @staticmethod
     def frames():
         while True:
-            time.sleep(1)
-            yield Camera.imgs[int(time.time()) % 3]
+            time.sleep(1) # yield thread
+            yield Camera.imgs[int(time.time()) % 3]  # sends data to browser https://flask.palletsprojects.com/en/1.1.x/patterns/streaming/
