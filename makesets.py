@@ -3,6 +3,7 @@ from os.path import join, getsize
 import glob
 import argparse
 import json
+import datetime
 import numpy as np
 import pandas as pd
 from shutil import copyfile
@@ -23,9 +24,14 @@ def list_dirs(top, maxdepth):
     return outDirs
 
 def matlab2datetime(matlab_datenum):
-    day = datetime.fromordinal(int(matlab_datenum))
-    dayfrac = datetime.timedelta(days=matlab_datenum%1) - datetime.timedelta(days = 366)
-    return day + dayfrac
+    ordinal = int(matlab_datenum) - 366
+    if(ordinal > 1):
+        ordinal
+        python_datetime = datetime.date.fromordinal(ordinal) + datetime.timedelta(days=matlab_datenum%1)
+    else:
+        python_datetime = None
+
+    return python_datetime
 
 def main(args):
     imbddata = {}
@@ -59,40 +65,20 @@ def main(args):
     with open(args.path + "/imdb_celeb_id.json") as json_file:
         imbddata['celeb_id'] = json.load(json_file)
 
-    imbddata['age'] =  pd.to_datetime(np.array(imbddata['photo_taken'],7,1)) - pd.to_datetime(np.array(imbddata['dob'])-719529, unit='D')
+    imbddata['age'] = []
+    for i in range(1,len(imbddata['photo_taken'])):
+        dob = matlab2datetime(imbddata['dob'][i])
+        photo = datetime.datetime(imbddata['photo_taken'][i],7,1).date()
+        if dob is not None:
+            dt = photo-dob
+            imbddata['age'].append(dt.days/365.24)
+        else:
+            imbddata['age'].append(-1)
 
 
-    wImage = '{}/*{}'.format(args.path, args.image_wildcard)
-    images = glob.glob(wImage)
-    wAnnotation = '{}/*{}'.format(args.path, args.annotation_wildcard)
-    annotations = glob.glob(wAnnotation)
-
-    for dataset in args.datasets:
-        imagesDir = '{}/images/{}'.format(args.outpath,dataset)
-        annotationsDir = '{}/annotations/{}'.format(args.outpath,dataset)
-        if not os.path.exists(imagesDir):
-            os.makedirs(imagesDir)
-        if not os.path.exists(annotationsDir):
-            os.makedirs(annotationsDir)
-
-    for imageName in images:
-        imageBaseName = os.path.splitext(imageName.split("/")[-1])[0]
-        annotationName = '{}/{}{}'.format(args.path,imageBaseName,args.annotation_wildcard)
-        if annotationName in annotations:
-            inst_rand = np.random.uniform()
-
-            set_probability = 0.0
-            for i, dataset in enumerate(args.datasets):
-                set_probability += args.set_probability[i]
-                if(inst_rand < set_probability):
-
-                    imgSrc = imageName
-                    annSrc = annotationName
-                    imgDest = '{}/images/{}/{}.tif'.format(args.outpath,dataset,imageBaseName)
-                    annDest = '{}/annotations/{}/{}.png'.format(args.outpath,dataset,imageBaseName)
-                    copyfile(imgSrc, imgDest)
-                    copyfile(annSrc, annDest)
-                    break  
+    with open(args.outpath + '/imbddata.json', 'w') as outfile:
+        json.dump(imbddata, outfile)
+ 
         
 
 def parse_arguments():
@@ -103,7 +89,7 @@ def parse_arguments():
         help='Path to data directory')
 
     parser.add_argument('--outpath', type=str,
-        default='/store/TrainingSet/20191211_GV_FV_C_W_SS',
+        default='/store/datasets/imdb-wiki/imdb',
         help='Path to output directory')
 
     parser.add_argument('--image_wildcard', type=str,
