@@ -24,12 +24,21 @@ def list_dirs(top, maxdepth):
     return outDirs
 
 def matlab2datetime(matlab_datenum):
-    ordinal = int(matlab_datenum) - 366
-    if(ordinal > 1):
-        ordinal
-        python_datetime = datetime.date.fromordinal(ordinal) + datetime.timedelta(days=matlab_datenum%1)
-    else:
+    try:
+        ordinal = datetime.date.fromordinal(int(matlab_datenum))
+        matlabDelta = datetime.timedelta(days = 366)
+        fraction = datetime.timedelta(days=matlab_datenum%1)
+        python_datetime = ordinal - matlabDelta + fraction
+    except:
         python_datetime = None
+
+    #ordinal = int(matlab_datenum) - 366
+    #if(ordinal > 1):
+    #    ordinal
+    #    python_datetime = datetime.date.fromordinal(ordinal) + datetime.timedelta(days=matlab_datenum%1)
+    #    python_datetime = datetime.fromordinal(int(matlab_datenum)) + datetime.timedelta(days=matlab_datenum%1) - datetime.timedelta(days = 366)
+    #else:
+    #    python_datetime = None
 
     return python_datetime
 
@@ -65,15 +74,13 @@ def main(args):
     with open(args.path + "/imdb_celeb_id.json") as json_file:
         imbddata['celeb_id'] = json.load(json_file)
 
-    imbddata['age'] = []
-    for i in range(1,len(imbddata['photo_taken'])):
+    imbddata['age'] = [None] * len(imbddata['dob'])
+    for i in range(0,len(imbddata['photo_taken'])):
         dob = matlab2datetime(imbddata['dob'][i])
         photo = datetime.datetime(imbddata['photo_taken'][i],7,1).date()
         if dob is not None:
-            dt = photo-dob
-            imbddata['age'].append(dt.days/365.24)
-        else:
-            imbddata['age'].append(-1)
+            dt = (photo-dob).days/365.25
+            imbddata['age'][i] = dt
 
 
     with open(args.outpath + '/imbddata.json', 'w') as outfile:
