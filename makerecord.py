@@ -8,7 +8,7 @@ def feature(value):
   """Returns a float_list from a float / double."""
   return tf.train.Feature(float_list=tf.train.FloatList(value=[value]))
 
-  def _convert_dataset(dataset_split):
+def _convert_dataset(dataset_split):
   """Converts the specified dataset split to TFRecord format.
 
   Args:
@@ -58,15 +58,44 @@ def feature(value):
     sys.stdout.flush()
 
 
+def WriteRecords(args, datasets, imbddata):
+    '''
+        dataset = [{name:'training', ratio:0.7}, {name:'validation', ratio:0.2}, {name:'test', ratio:0.1}]
+        imbddata = []
+    '''
+
+    # shuffle records between datasets and shards
+    random.shuffle(imbddata, args.seed)
+    start = 0
+    for shard_id in range(args.shards):
+        for ids, dataset in enumerate(datasets):
+            output_filename = os.path.join(args.out, '%s-%05d-of-%05d.tfrecord' % (dataset['name'], shard_id, args.shards))
+            if(ids < len(dataset)-1):
+                stop = len(imbddata)*dataset['ratio']
+            else:
+                stop = len(imbddata)
+            start = stop
+
+            with tf.python_io.TFRecordWriter(output_filename) as tfrecord_writer:
+                for i,data in enumerate(imbddata[:stop-start], start=start, ):
+
+                    # Convert to tf example.
+                    example = build_data.image_seg_to_tfexample(image_data, filenames[i], height, width, seg_data)
+                    tfrecord_writer.write(example.SerializeToString())
+
+            sys.stdout.write('\n')
+            sys.stdout.flush()
+
+
+
 def main(args):
     imbddata = {}
-    with open(args.path + "/imbddata.json") as json_file:
+    with open(args.path + "imbddata.json") as json_file:
         imbddata = json.load(json_file)
 
     for i in range(0,len(imbddata['gender'])):
-        img = imbddata['full_jpath'][i]
-        features_dataset = tf.data.Dataset.from_tensor_slices((feature(imbddata['gender'][i]), 
-            feature(imbddata['age'][i], feature2, feature3))
+        img = args.path +'imdb_crop/'+ imbddata['full_path'][i]
+        features_dataset = tf.data.Dataset.from_tensor_slices((feature(imbddata['gender'][i]), feature(imbddata['age'][i])))
 
     print('exit')
         
@@ -75,11 +104,13 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description='Process some integers.')
 
     parser.add_argument('--path', type=str,
-        default='C:\data\datasets\imdb',
+        #default='C:\data\datasets\imdb\',
+        default='/store/datasets/imdb/',
         help='Path to data directory')
 
     parser.add_argument('--out', type=str,
-        default='C:\data\datasets\imdb',
+        #default='C:\data\datasets\imdb\',
+        default='/store/datasets/imdb/',
         help='Path to output directory')
 
     parser.add_argument('--image_wildcard', type=str,
@@ -89,6 +120,12 @@ def parse_arguments():
     parser.add_argument('--annotation_wildcard', type=str,
         default='_cls.png',
         help='Image file wildcard e.g.: _cls.png')
+
+    parser.add_argument('--seed', type float, default=None, help='Random float seed between 0.1 to 1.0')
+    
+    parser.add_argument('--shards', type=int,
+        default= 4,
+        help='Number of tfrecord shards')
 
     parser.add_argument('--set_probability', nargs='+', type=float,
         default= [0.7, 0.3],
