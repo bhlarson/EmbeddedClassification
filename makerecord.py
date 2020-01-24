@@ -2,6 +2,7 @@ import os
 import argparse
 import json
 import build_data
+import random
 import tensorflow as tf
 
 def feature(value):
@@ -57,6 +58,12 @@ def _convert_dataset(dataset_split):
     sys.stdout.write('\n')
     sys.stdout.flush()
 
+def shuffle(seed, *lists):
+
+    if seed is None:
+        seed = random.random()
+    for ls in lists:
+        random.Random(seed).shuffle(ls)
 
 def WriteRecords(args, datasets, imbddata):
     '''
@@ -65,24 +72,36 @@ def WriteRecords(args, datasets, imbddata):
     '''
 
     # shuffle records between datasets and shards
-    random.shuffle(imbddata, args.seed)
+    shuffle(args.seed, imbddata['age'], 
+        imbddata['dob'], 
+        imbddata['face_location'], 
+        imbddata['face_score'], 
+        imbddata['full_path'], 
+        imbddata['gender'], 
+        imbddata['name'], 
+        imbddata['photo_taken'], 
+        imbddata['second_face_score'])
+
+
     start = 0
+    numEntries = len(imbddata['dob'])
     for shard_id in range(args.shards):
         for ids, dataset in enumerate(datasets):
             output_filename = os.path.join(args.out, '%s-%05d-of-%05d.tfrecord' % (dataset['name'], shard_id, args.shards))
             if(ids < len(dataset)-1):
-                stop = len(imbddata)*dataset['ratio']
+                stop = int(numEntries*dataset['ratio'])
             else:
-                stop = len(imbddata)
-            start = stop
+                stop = numEntries
 
             with tf.python_io.TFRecordWriter(output_filename) as tfrecord_writer:
-                for i,data in enumerate(imbddata[:stop-start], start=start, ):
-
+                for i in range(start, stop):
                     # Convert to tf example.
+                    imgPath = '{}imdb_crop/{}'.format(args.path, imbddata['full_path'][i])
+ll                    print(imgPath)
+                    example = build_example(imbddata['name'][i], imbddata['age'][i], imbddata['gender'][i],imgPath)
                     example = build_data.image_seg_to_tfexample(image_data, filenames[i], height, width, seg_data)
                     tfrecord_writer.write(example.SerializeToString())
-
+            start = stop
             sys.stdout.write('\n')
             sys.stdout.flush()
 
@@ -93,9 +112,12 @@ def main(args):
     with open(args.path + "imbddata.json") as json_file:
         imbddata = json.load(json_file)
 
-    for i in range(0,len(imbddata['gender'])):
-        img = args.path +'imdb_crop/'+ imbddata['full_path'][i]
-        features_dataset = tf.data.Dataset.from_tensor_slices((feature(imbddata['gender'][i]), feature(imbddata['age'][i])))
+    datasets = [{'name':'training', 'ratio':0.7}, {'name':'validation', 'ratio':0.2}, {'name':'test', 'ratio':0.1}]
+    WriteRecords(args, datasets, imbddata)
+    
+    #for i in range(0,len(imbddata['gender'])):
+    #    img = args.path +'imdb_crop/'+ imbddata['full_path'][i]
+    #    features_dataset = tf.data.Dataset.from_tensor_slices((feature(imbddata['gender'][i]), feature(imbddata['age'][i])))
 
     print('exit')
         
@@ -103,35 +125,45 @@ def main(args):
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Process some integers.')
 
-    parser.add_argument('--path', type=str,
+    parser.add_argument('--path', 
+        type=str,
         #default='C:\data\datasets\imdb\',
         default='/store/datasets/imdb/',
         help='Path to data directory')
 
-    parser.add_argument('--out', type=str,
+    parser.add_argument('--out', 
+        type=str,
         #default='C:\data\datasets\imdb\',
         default='/store/datasets/imdb/',
         help='Path to output directory')
 
-    parser.add_argument('--image_wildcard', type=str,
+    parser.add_argument('--image_wildcard', 
+        type=str,
         default='.tif',
         help='Image file wildcard e.g.: .tif')
 
-    parser.add_argument('--annotation_wildcard', type=str,
+    parser.add_argument('--annotation_wildcard', 
+        type=str,
         default='_cls.png',
         help='Image file wildcard e.g.: _cls.png')
 
-    parser.add_argument('--seed', type float, default=None, help='Random float seed between 0.1 to 1.0')
+    parser.add_argument('--seed', 
+        type=float, 
+        default=None, 
+        help='Random float seed between 0.1 to 1.0')
     
-    parser.add_argument('--shards', type=int,
+    parser.add_argument('--shards', 
+        type=int,
         default= 4,
         help='Number of tfrecord shards')
 
-    parser.add_argument('--set_probability', nargs='+', type=float,
+    parser.add_argument('--set_probability', 
+        nargs='+', type=float,
         default= [0.7, 0.3],
         help='set probability min=0.0, max = 1.0')
 
-    parser.add_argument('--datasets', nargs='+', type=str,
+    parser.add_argument('--datasets', nargs='+', 
+        type=str,
         default=['training', 'validation'],
         help='set probability min=0.0, max = 1.0')
 
