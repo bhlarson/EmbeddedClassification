@@ -111,6 +111,8 @@ def main(args):
     imbddata = {}
     with open(args.path + "imbddata.json") as json_file:
         imbddata = json.load(json_file)
+    datasets = [{name:'training', ratio:0.7}, {name:'validation', ratio:0.2}, {name:'test', ratio:0.1}]
+    WriteRecords(args, datasets, imbddata)
 
     datasets = [{'name':'training', 'ratio':0.7}, {'name':'validation', 'ratio':0.2}, {'name':'test', 'ratio':0.1}]
     WriteRecords(args, datasets, imbddata)
@@ -118,6 +120,7 @@ def main(args):
     #for i in range(0,len(imbddata['gender'])):
     #    img = args.path +'imdb_crop/'+ imbddata['full_path'][i]
     #    features_dataset = tf.data.Dataset.from_tensor_slices((feature(imbddata['gender'][i]), feature(imbddata['age'][i])))
+
 
     print('exit')
         
@@ -135,6 +138,7 @@ def parse_arguments():
         type=str,
         #default='C:\data\datasets\imdb\',
         default='/store/datasets/imdb/',
+
         help='Path to output directory')
 
     parser.add_argument('--image_wildcard', 
@@ -151,6 +155,7 @@ def parse_arguments():
         type=float, 
         default=None, 
         help='Random float seed between 0.1 to 1.0')
+
     
     parser.add_argument('--shards', 
         type=int,
