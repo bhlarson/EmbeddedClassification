@@ -2,7 +2,13 @@ import os
 import argparse
 import json
 import build_data
+import random
+from random import shuffle
 import tensorflow as tf
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
 
 def feature(value):
   """Returns a float_list from a float / double."""
@@ -57,31 +63,87 @@ def _convert_dataset(dataset_split):
     sys.stdout.write('\n')
     sys.stdout.flush()
 
+def ShuffleLists(args, imbddata):
+
+    '''if args.seed is None:
+        args.Seed = os.urandom(64)
+
+    random.Random(args.seed).shuffle(imbddata['age'])
+    random.Random(args.seed).shuffle(imbddata['dob'])
+    random.Random(args.seed).shuffle(imbddata['face_location'])
+    random.Random(args.seed).shuffle(imbddata['full_path'])
+    random.Random(args.seed).shuffle(imbddata['face_score'])
+    random.Random(args.seed).shuffle(imbddata['full_path'])
+    random.Random(args.seed).shuffle(imbddata['gender'])
+    random.Random(args.seed).shuffle(imbddata['name'])
+    random.Random(args.seed).shuffle(imbddata['photo_taken'])
+    random.Random(args.seed).shuffle(imbddata['second_face_score'])'''
+
+def ShowRecords(imbddata)
+
+def Example(args, i, imbddata):
+
+    imgpath = '{}imdb_crop/{}'.format(args.path,imbddata['full_path'][i])
+    img = cv2.imread(imgpath)
+    y,x,c = img.shape
+    scale = args.size/max(y,x)
+    xOffset = int((args.size-scale*x)/2)
+    yOffset = int((args.size-scale*y)/2)
+
+    M = np.float32([[scale,0,xOffset],[0,scale,yOffset]])
+    dst = cv2.warpAffine(img,M,(args.size,args.size))
+
+    if args.show:
+        fig = plt.figure()
+        a = fig.add_subplot(1, 2, 1)
+        plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+        a.set_title(imbddata['name'][i])
+
+        a = fig.add_subplot(1, 2, 2)
+        plt.imshow(cv2.cvtColor(dst, cv2.COLOR_BGR2RGB))
+        a.set_title(imbddata['age'][i])
+
+        plt.show()
+
+    #return tf.train.Example(features=tf.train.Features(feature={
+    #  'image/encoded': _bytes_list_feature(numpy.asarray(dst)),
+    #  'image/filename': _bytes_list_feature(filename),
+    #  'image/format': _bytes_list_feature(
+    #      _IMAGE_FORMAT_MAP[FLAGS.image_format]),
+    #  'image/height': _int64_list_feature(height),
+    #  'image/width': _int64_list_feature(width),
+    #  'image/channels': _int64_list_feature(3),
+    #  'image/segmentation/class/encoded': (
+    #      _bytes_list_feature(seg_data)),
+    #  'image/segmentation/class/format': _bytes_list_feature(
+    #      FLAGS.label_format),
+    #}))
+    
 
 def WriteRecords(args, datasets, imbddata):
     '''
-        dataset = [{name:'training', ratio:0.7}, {name:'validation', ratio:0.2}, {name:'test', ratio:0.1}]
+        datasets = [{'name':'training', 'ratio':0.7}, {'name':'validation', 'ratio':0.2}, {'name':'test', 'ratio':0.1}]
         imbddata = []
     '''
 
     # shuffle records between datasets and shards
-    random.shuffle(imbddata, args.seed)
+    ShuffleLists(args,imbddata)
     start = 0
     for shard_id in range(args.shards):
         for ids, dataset in enumerate(datasets):
             output_filename = os.path.join(args.out, '%s-%05d-of-%05d.tfrecord' % (dataset['name'], shard_id, args.shards))
             if(ids < len(dataset)-1):
-                stop = len(imbddata)*dataset['ratio']
+                stop = int(len(imbddata['age'])*dataset['ratio'])
             else:
                 stop = len(imbddata)
-            start = stop
 
             with tf.python_io.TFRecordWriter(output_filename) as tfrecord_writer:
-                for i,data in enumerate(imbddata[:stop-start], start=start, ):
-
-                    # Convert to tf example.
+                for i in range(start,stop):
+                    Example(args, i,imbddata )
+                    '''example = Example(i,image_data )
                     example = build_data.image_seg_to_tfexample(image_data, filenames[i], height, width, seg_data)
-                    tfrecord_writer.write(example.SerializeToString())
+                    tfrecord_writer.write(example.SerializeToString())'''
+            start = stop
 
             sys.stdout.write('\n')
             sys.stdout.flush()
@@ -92,7 +154,7 @@ def main(args):
     imbddata = {}
     with open(args.path + "imbddata.json") as json_file:
         imbddata = json.load(json_file)
-    datasets = [{name:'training', ratio:0.7}, {name:'validation', ratio:0.2}, {name:'test', ratio:0.1}]
+    datasets = [{'name':'training', 'ratio':0.7}, {'name':'validation', 'ratio':0.2}, {'name':'test', 'ratio':0.1}]
     WriteRecords(args, datasets, imbddata)
 
     '''for i in range(0,len(imbddata['gender'])):
@@ -106,12 +168,12 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description='Process some integers.')
 
     parser.add_argument('--path', type=str,
-        default='C:\data\datasets\imdb\',
+        default='C:\\data\\datasets\\imdb\\',
         #default='/store/datasets/imdb/',
         help='Path to data directory')
 
     parser.add_argument('--out', type=str,
-        default='C:\data\datasets\imdb\',
+        default='C:\\data\\datasets\\imdb\\',
         #default='/store/datasets/imdb/',
         help='Path to output directory')
 
@@ -136,6 +198,15 @@ def parse_arguments():
     parser.add_argument('--datasets', nargs='+', type=str,
         default=['training', 'validation'],
         help='set probability min=0.0, max = 1.0')
+
+    parser.add_argument('--size', type=int,
+        default= 96,
+        help='Image pizel size')
+
+    parser.add_argument('--show', 
+        type=bool,
+        default=True,
+        help='Display incremental results')
 
     args = parser.parse_args()
     return args
