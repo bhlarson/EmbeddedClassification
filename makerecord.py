@@ -3,7 +3,7 @@ import argparse
 import json
 import build_data
 import random
-from random import shuffle
+
 import tensorflow as tf
 import cv2
 import numpy as np
@@ -63,23 +63,22 @@ def _convert_dataset(dataset_split):
     sys.stdout.write('\n')
     sys.stdout.flush()
 
-def ShuffleLists(args, imbddata):
+def shuffle(seed, *lists):
 
-    '''if args.seed is None:
-        args.Seed = os.urandom(64)
+    if seed is None:
+        seed = random.random()
+    for ls in lists:
+        random.Random(seed).shuffle(ls)
 
-    random.Random(args.seed).shuffle(imbddata['age'])
-    random.Random(args.seed).shuffle(imbddata['dob'])
-    random.Random(args.seed).shuffle(imbddata['face_location'])
-    random.Random(args.seed).shuffle(imbddata['full_path'])
-    random.Random(args.seed).shuffle(imbddata['face_score'])
-    random.Random(args.seed).shuffle(imbddata['full_path'])
-    random.Random(args.seed).shuffle(imbddata['gender'])
-    random.Random(args.seed).shuffle(imbddata['name'])
-    random.Random(args.seed).shuffle(imbddata['photo_taken'])
-    random.Random(args.seed).shuffle(imbddata['second_face_score'])'''
+def _bytes_feature(value):
+  """Returns a bytes_list from a string / byte."""
+  if isinstance(value, type(tf.constant(0))):
+    value = value.numpy() # BytesList won't unpack a string from an EagerTensor.
+  return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
 
-def ShowRecords(imbddata)
+def _str_feature(value):
+    return _bytes_feature(str.encode(value))
+    
 
 def Example(args, i, imbddata):
 
@@ -101,23 +100,23 @@ def Example(args, i, imbddata):
 
         a = fig.add_subplot(1, 2, 2)
         plt.imshow(cv2.cvtColor(dst, cv2.COLOR_BGR2RGB))
-        a.set_title(imbddata['age'][i])
+        a.set_title('age:{}, gender:{}'.format(imbddata['age'][i],imbddata['gender'][i]))
 
         plt.show()
 
-    #return tf.train.Example(features=tf.train.Features(feature={
-    #  'image/encoded': _bytes_list_feature(numpy.asarray(dst)),
-    #  'image/filename': _bytes_list_feature(filename),
-    #  'image/format': _bytes_list_feature(
-    #      _IMAGE_FORMAT_MAP[FLAGS.image_format]),
-    #  'image/height': _int64_list_feature(height),
-    #  'image/width': _int64_list_feature(width),
-    #  'image/channels': _int64_list_feature(3),
-    #  'image/segmentation/class/encoded': (
-    #      _bytes_list_feature(seg_data)),
-    #  'image/segmentation/class/format': _bytes_list_feature(
-    #      FLAGS.label_format),
-    #}))
+    feature = {
+        'subject':  _str_feature(imbddata['name'][i]),
+        'height':  tf.train.Feature(int64_list=tf.train.Int64List(value=[args.size])),
+        'width':  tf.train.Feature(int64_list=tf.train.Int64List(value=[args.size])),
+        'depth':  tf.train.Feature(int64_list=tf.train.Int64List(value=[3])),
+        'gender': tf.train.Feature(float_list=tf.train.FloatList(value=[float(imbddata['gender'][i])])),
+        'age': tf.train.Feature(float_list=tf.train.FloatList(value=[imbddata['age'][i]])),
+        'path': _str_feature(imbddata['full_path'][i]),
+        'image': _bytes_feature(dst.tobytes())
+    }
+
+    return tf.train.Example(features=tf.train.Features(feature=feature))
+
     
 
 def WriteRecords(args, datasets, imbddata):
@@ -127,22 +126,32 @@ def WriteRecords(args, datasets, imbddata):
     '''
 
     # shuffle records between datasets and shards
-    ShuffleLists(args,imbddata)
+
+    shuffle(args.seed, imbddata['age'], 
+        imbddata['dob'], 
+        imbddata['face_location'], 
+        imbddata['face_score'], 
+        imbddata['full_path'], 
+        imbddata['gender'], 
+        imbddata['name'], 
+        imbddata['photo_taken'], 
+        imbddata['second_face_score'])
+
     start = 0
+    numEntries = len(imbddata['dob'])
     for shard_id in range(args.shards):
         for ids, dataset in enumerate(datasets):
             output_filename = os.path.join(args.out, '%s-%05d-of-%05d.tfrecord' % (dataset['name'], shard_id, args.shards))
             if(ids < len(dataset)-1):
-                stop = int(len(imbddata['age'])*dataset['ratio'])
+                stop = int(numEntries*dataset['ratio'])
             else:
-                stop = len(imbddata)
+                stop = numEntries
 
             with tf.python_io.TFRecordWriter(output_filename) as tfrecord_writer:
                 for i in range(start,stop):
-                    Example(args, i,imbddata )
-                    '''example = Example(i,image_data )
-                    example = build_data.image_seg_to_tfexample(image_data, filenames[i], height, width, seg_data)
-                    tfrecord_writer.write(example.SerializeToString())'''
+                    if(imbddata['face_score'][i]>= 1.0 and imbddata['age'][i] and imbddata['gender'][i]):
+                        example = Example(args, i,imbddata)
+                        tfrecord_writer.write(example.SerializeToString())
             start = stop
 
             sys.stdout.write('\n')
@@ -157,9 +166,13 @@ def main(args):
     datasets = [{'name':'training', 'ratio':0.7}, {'name':'validation', 'ratio':0.2}, {'name':'test', 'ratio':0.1}]
     WriteRecords(args, datasets, imbddata)
 
-    '''for i in range(0,len(imbddata['gender'])):
-        img = args.path +'imdb_crop/'+ imbddata['full_path'][i]
-        features_dataset = tf.data.Dataset.from_tensor_slices((feature(imbddata['gender'][i]), feature(imbddata['age'][i])))'''
+    datasets = [{'name':'training', 'ratio':0.7}, {'name':'validation', 'ratio':0.2}, {'name':'test', 'ratio':0.1}]
+    WriteRecords(args, datasets, imbddata)
+    
+    #for i in range(0,len(imbddata['gender'])):
+    #    img = args.path +'imdb_crop/'+ imbddata['full_path'][i]
+    #    features_dataset = tf.data.Dataset.from_tensor_slices((feature(imbddata['gender'][i]), feature(imbddata['age'][i])))
+
 
     print('exit')
         
@@ -167,45 +180,57 @@ def main(args):
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Process some integers.')
 
-    parser.add_argument('--path', type=str,
+    parser.add_argument('--path', 
+        type=str,
         default='C:\\data\\datasets\\imdb\\',
         #default='/store/datasets/imdb/',
         help='Path to data directory')
 
-    parser.add_argument('--out', type=str,
+    parser.add_argument('--out', 
+        type=str,
         default='C:\\data\\datasets\\imdb\\',
         #default='/store/datasets/imdb/',
+
         help='Path to output directory')
 
-    parser.add_argument('--image_wildcard', type=str,
+    parser.add_argument('--image_wildcard', 
+        type=str,
         default='.tif',
         help='Image file wildcard e.g.: .tif')
 
-    parser.add_argument('--annotation_wildcard', type=str,
+    parser.add_argument('--annotation_wildcard', 
+        type=str,
         default='_cls.png',
         help='Image file wildcard e.g.: _cls.png')
 
-    parser.add_argument('--seed', type=float, default=None, help='Random float seed between 0.1 to 1.0')
+    parser.add_argument('--seed', 
+        type=float, 
+        default=None, 
+        help='Random float seed between 0.1 to 1.0')
+
     
-    parser.add_argument('--shards', type=int,
-        default= 4,
+    parser.add_argument('--shards', 
+        type=int,
+        default= 12,
         help='Number of tfrecord shards')
 
-    parser.add_argument('--set_probability', nargs='+', type=float,
+    parser.add_argument('--set_probability', 
+        nargs='+', type=float,
         default= [0.7, 0.3],
         help='set probability min=0.0, max = 1.0')
 
-    parser.add_argument('--datasets', nargs='+', type=str,
+    parser.add_argument('--datasets', nargs='+', 
+        type=str,
         default=['training', 'validation'],
         help='set probability min=0.0, max = 1.0')
 
     parser.add_argument('--size', type=int,
-        default= 96,
+        default= 128,
         help='Image pizel size')
 
     parser.add_argument('--show', 
         type=bool,
-        default=True,
+        default=False,
         help='Display incremental results')
 
     args = parser.parse_args()
