@@ -184,13 +184,13 @@ def parse_arguments():
     parser.add_argument('--path', 
         type=str,
         #default='C:\\data\\datasets\\imdb\\',
-        default='/store/datasets/imdb/',
+        default='/img/Datasets/imdb-wiki/',
         help='Path to data directory')
 
     parser.add_argument('--out', 
         type=str,
         #default='C:\\data\\datasets\\imdb\\',
-        default='/store/datasets/imdb/',
+        default='/img/Datasets/imdb-wiki/',
 
         help='Path to output directory')
 

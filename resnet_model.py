@@ -1,4 +1,4 @@
-"""DeepLab v3 models based on slim library."""
+"""Resnetmodel."""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -10,7 +10,6 @@ from tensorflow.contrib.slim.nets import resnet_v2
 from tensorflow.contrib import layers as layers_lib
 from tensorflow.contrib.framework.python.ops import arg_scope
 from tensorflow.contrib.layers.python.layers import layers
-from tensorflow.contrib.slim.python.slim.nets import resnet_utils
 
 from utils import preprocessing
 
@@ -193,7 +192,7 @@ def block_layer(inputs, filters, block_fn, blocks, strides, is_training, name,
 
   return tf.identity(inputs, name)
 
-def align_resnet_v2_generator(block_fn, layers, num_classes, data_format=None):
+def align_resnet_v2_generator(block_fn, layers, data_format=None):
   """Generator for ImageNet ResNet v2 models.
 
   Args:
@@ -252,13 +251,13 @@ def align_resnet_v2_generator(block_fn, layers, num_classes, data_format=None):
         data_format=data_format)
     inputs = tf.identity(inputs, 'final_avg_pool')
     inputs = tf.reshape(inputs,[-1, 512 if block_fn is building_block else 2048])
-    inputs = tf.layers.dense(inputs=inputs, units=num_classes)
-    inputs = tf.identity(inputs, 'final_dense')
+    #inputs = tf.layers.dense(inputs=inputs, units=num_classes)
+    #inputs = tf.identity(inputs, 'final_dense')
     return inputs
 
   return model
 
-def resnet_v2(resnet_size, num_classes, data_format=None):
+def resnet_v2(resnet_size, data_format=None):
   """Returns the ResNet model for a given size and number of output classes."""
   model_params = {
       18: {'block': building_block, 'layers': [2, 2, 2, 2]},
@@ -273,7 +272,7 @@ def resnet_v2(resnet_size, num_classes, data_format=None):
     raise ValueError('Not a valid resnet_size:', resnet_size)
 
   params = model_params[resnet_size]
-  return align_resnet_v2_generator(params['block'], params['layers'], num_classes, data_format)
+  return align_resnet_v2_generator(params['block'], params['layers'], data_format)
 
 
 def resnetv2_model_fn(features, labels, mode, params):
@@ -285,7 +284,16 @@ def resnetv2_model_fn(features, labels, mode, params):
       tf.map_fn(preprocessing.mean_image_addition, features),
       tf.uint8)
 
-  network = resnet_v2(params['resnetSize'], params['num_classes'])
+  network = resnet_v2(params['resnetSize'])
+
+  num_classes_gender = 2
+  inputs = tf.layers.dense(inputs=inputs, units=num_classes)
+  final_dense_gender = tf.identity(inputs, 'final_dense_gender')
+
+  num_classes_age = 1
+  inputs = tf.layers.dense(inputs=inputs, units=num_classes_age)
+
+  final_dense_age = tf.identity(inputs, 'final_dense_age')
 
   logits = network(features, mode == tf.estimator.ModeKeys.TRAIN)
 

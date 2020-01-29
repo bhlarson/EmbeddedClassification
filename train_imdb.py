@@ -10,6 +10,7 @@ import sys
 
 import tensorflow as tf
 import deeplab_model
+import resnet_model
 from utils import preprocessing
 from tensorflow.python import debug as tf_debug
 
@@ -81,8 +82,8 @@ parser.add_argument('--debug', action='store_true',
                     help='Whether to use debugger to track down bad values during training.')
 
 _NUM_CLASSES = 21
-_HEIGHT = 513
-_WIDTH = 513
+_HEIGHT = 128
+_WIDTH = 128
 _DEPTH = 3
 _MIN_SCALE = 0.5
 _MAX_SCALE = 2.0
@@ -116,8 +117,6 @@ def get_filenames(is_training, data_dir):
 
 
 def parse_record(raw_record):
-  """Parse PASCAL image and label from a tf record."""
-
   feature = {
         'subject':  tf.FixedLenFeature((), tf.string, default_value=''),
         'height':  tf.FixedLenFeature((), tf.int64),
@@ -134,17 +133,14 @@ def parse_record(raw_record):
   # height = tf.cast(parsed['image/height'], tf.int32)
   # width = tf.cast(parsed['image/width'], tf.int32)
 
-  image = tf.image.decode_image(
-      tf.reshape(parsed['image/encoded'], shape=[]), _DEPTH)
+  image = tf.image.decode_image(tf.reshape(parsed['image'], shape=[]), _DEPTH)
   image = tf.to_float(tf.image.convert_image_dtype(image, dtype=tf.uint8))
   image.set_shape([None, None, 3])
 
-  label = tf.image.decode_image(
-      tf.reshape(parsed['label/encoded'], shape=[]), 1)
-  label = tf.to_int32(tf.image.convert_image_dtype(label, dtype=tf.uint8))
-  label.set_shape([None, None, 1])
+  gender = parsed['gender']
+  age = parsed['age']
 
-  return image, label
+  return image, gender, age
 
 
 def preprocess_image(image, label, is_training):
