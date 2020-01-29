@@ -37,7 +37,7 @@ def _convert_dataset(dataset_split):
     output_filename = os.path.join(
         FLAGS.output_dir,
         '%s-%05d-of-%05d.tfrecord' % (dataset, shard_id, _NUM_SHARDS))
-    with tf.python_io.TFRecordWriter(output_filename) as tfrecord_writer:
+    with tf.io.TFRecordWriter(output_filename) as tfrecord_writer:
       start_idx = shard_id * num_per_shard
       end_idx = min((shard_id + 1) * num_per_shard, num_images)
       for i in range(start_idx, end_idx):
@@ -148,7 +148,7 @@ def WriteRecords(args, datasets, imbddata):
             else:
                 stop = numEntries
 
-            with tf.python_io.TFRecordWriter(output_filename) as tfrecord_writer:
+            with tf.io.TFRecordWriter(output_filename) as tfrecord_writer:
                 for i in range(start,stop):
                     if(imbddata['face_score'][i]>= 1.0 and imbddata['age'][i] and imbddata['gender'][i]):
                         example = Example(args, i,imbddata)
@@ -183,14 +183,14 @@ def parse_arguments():
 
     parser.add_argument('--path', 
         type=str,
-        default='C:\\data\\datasets\\imdb\\',
-        #default='/store/datasets/imdb/',
+        #default='C:\\data\\datasets\\imdb\\',
+        default='/store/datasets/imdb/',
         help='Path to data directory')
 
     parser.add_argument('--out', 
         type=str,
-        default='C:\\data\\datasets\\imdb\\',
-        #default='/store/datasets/imdb/',
+        #default='C:\\data\\datasets\\imdb\\',
+        default='/store/datasets/imdb/',
 
         help='Path to output directory')
 
