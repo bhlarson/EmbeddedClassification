@@ -287,15 +287,14 @@ def resnetv2_model_fn(features, labels, mode, params):
   network = resnet_v2(params['resnetSize'])
 
   num_classes_gender = 2
-  inputs = tf.layers.dense(inputs=inputs, units=num_classes)
+  inputs = tf.layers.dense(inputs=inputs, units=num_classes_gender)
   final_dense_gender = tf.identity(inputs, 'final_dense_gender')
+  pred_gender = tf.argmax(final_dense_gender, axis=1, output_type=tf.int32)
 
   num_classes_age = 1
-  inputs = tf.layers.dense(inputs=inputs, units=num_classes_age)
+  final_dense_age = tf.layers.dense(inputs=inputs, units=num_classes_age)
+  pred_age = tf.identity(final_dense_age, 'pred_age')
 
-  final_dense_age = tf.identity(inputs, 'final_dense_age')
-
-  logits = network(features, mode == tf.estimator.ModeKeys.TRAIN)
 
   pred_classes = tf.expand_dims(tf.argmax(logits, axis=3, output_type=tf.int32), axis=3)
 
@@ -304,22 +303,18 @@ def resnetv2_model_fn(features, labels, mode, params):
                                    tf.uint8)
 
   predictions = {
-      'classes': pred_classes,
-      'probabilities': tf.nn.softmax(logits, name='softmax_tensor'),
-      'decoded_labels': pred_decoded_labels
+      'pred_age': pred_age,
+      'pred_gender': pred_classes,
+      'logits_gender': final_dense_gender,
   }
 
   if mode == tf.estimator.ModeKeys.PREDICT:
-    # Delete 'decoded_labels' from predictions because custom functions produce error when used with saved_model
-    predictions_without_decoded_labels = predictions.copy()
-    del predictions_without_decoded_labels['decoded_labels']
-
     return tf.estimator.EstimatorSpec(
         mode=mode,
         predictions=predictions,
         export_outputs={
             'preds': tf.estimator.export.PredictOutput(
-                predictions_without_decoded_labels)
+                predictions)
         })
 
   gt_decoded_labels = tf.py_func(preprocessing.decode_labels,
