@@ -286,52 +286,44 @@ def resnetv2_model_fn(features, labels, mode, params):
 
   network = resnet_v2(params['resnetSize'])
 
+  # Male/female classification
   num_classes_gender = 2
-  inputs = tf.layers.dense(inputs=inputs, units=num_classes_gender)
-  final_dense_gender = tf.identity(inputs, 'final_dense_gender')
-  pred_gender = tf.argmax(final_dense_gender, axis=1, output_type=tf.int32)
+  inputs = tf.layers.dense(inputs=network, units=num_classes_gender)
+  logits_gender = tf.identity(inputs, 'final_dense_gender')
+  pred_gender = tf.argmax(logits_gender, axis=1, output_type=tf.int32)
 
+  # Age regression
   num_classes_age = 1
   final_dense_age = tf.layers.dense(inputs=inputs, units=num_classes_age)
   pred_age = tf.identity(final_dense_age, 'pred_age')
 
-
-  pred_classes = tf.expand_dims(tf.argmax(logits, axis=3, output_type=tf.int32), axis=3)
-
-  pred_decoded_labels = tf.py_func(preprocessing.decode_labels,
-                                   [pred_classes, params['batch_size'], params['num_classes']],
-                                   tf.uint8)
-
   predictions = {
       'pred_age': pred_age,
-      'pred_gender': pred_classes,
-      'logits_gender': final_dense_gender,
+      'pred_gender': pred_gender,
+      'logits_gender': logits_gender,
   }
 
   if mode == tf.estimator.ModeKeys.PREDICT:
     return tf.estimator.EstimatorSpec(
         mode=mode,
         predictions=predictions,
-        export_outputs={
-            'preds': tf.estimator.export.PredictOutput(
-                predictions)
-        })
 
+  # Prepare data for both train and eval modes
   gt_decoded_labels = tf.py_func(preprocessing.decode_labels,
-                                 [labels, params['batch_size'], params['num_classes']], tf.uint8)
+                                 [labels, params['batch_size'], num_classes_gender], tf.uint8)
 
   labels = tf.squeeze(labels, axis=3)  # reduce the channel dimension.
 
-  logits_by_num_classes = tf.reshape(logits, [-1, params['num_classes']])
+  logits_by_num_classes = tf.reshape(logits_gender, [-1, num_classes_gender])
   labels_flat = tf.reshape(labels, [-1, ])
 
-  valid_indices = tf.to_int32(labels_flat <= params['num_classes'] - 1)
+  valid_indices = tf.to_int32(labels_flat <= num_classes_gender - 1)
   valid_logits = tf.dynamic_partition(logits_by_num_classes, valid_indices, num_partitions=2)[1]
   valid_labels = tf.dynamic_partition(labels_flat, valid_indices, num_partitions=2)[1]
 
   preds_flat = tf.reshape(pred_classes, [-1, ])
   valid_preds = tf.dynamic_partition(preds_flat, valid_indices, num_partitions=2)[1]
-  confusion_matrix = tf.confusion_matrix(valid_labels, valid_preds, num_classes=params['num_classes'])
+  confusion_matrix = tf.confusion_matrix(valid_labels, valid_preds, num_classes=num_classes_gender)
 
   predictions['valid_preds'] = valid_preds
   predictions['valid_labels'] = valid_labels
@@ -398,7 +390,7 @@ def resnetv2_model_fn(features, labels, mode, params):
 
   accuracy = tf.metrics.accuracy(
       valid_labels, valid_preds)
-  mean_iou = tf.metrics.mean_iou(valid_labels, valid_preds, params['num_classes'])
+  mean_iou = tf.metrics.mean_iou(valid_labels, valid_preds, num_classes_gender)
   metrics = {'px_accuracy': accuracy, 'mean_iou': mean_iou}
 
   # Create a tensor named train_accuracy for logging purposes
@@ -426,7 +418,7 @@ def resnetv2_model_fn(features, labels, mode, params):
         tf.ones_like(denominator))
     iou = tf.div(cm_diag, denominator)
 
-    for i in range(params['num_classes']):
+    for i in range(num_classes_gender):
       tf.identity(iou[i], name='train_iou_class{}'.format(i))
       tf.summary.scalar('train_iou_class{}'.format(i), iou[i])
 
