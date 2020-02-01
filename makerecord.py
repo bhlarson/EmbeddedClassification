@@ -212,7 +212,7 @@ def parse_arguments():
     
     parser.add_argument('--shards', 
         type=int,
-        default= 12,
+        default= 1,
         help='Number of tfrecord shards')
 
     parser.add_argument('--set_probability', 

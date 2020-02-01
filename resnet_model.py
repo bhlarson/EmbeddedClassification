@@ -314,14 +314,15 @@ def resnetv2_model_fn(features, labels, mode, params):
 
   labels = tf.squeeze(labels, axis=3)  # reduce the channel dimension.
 
+  # Compute 
   logits_by_num_classes = tf.reshape(logits_gender, [-1, num_classes_gender])
-  labels_flat = tf.reshape(labels, [-1, ])
+  labels_flat = tf.reshape(labels, [1, ])
 
   valid_indices = tf.to_int32(labels_flat <= num_classes_gender - 1)
   valid_logits = tf.dynamic_partition(logits_by_num_classes, valid_indices, num_partitions=2)[1]
   valid_labels = tf.dynamic_partition(labels_flat, valid_indices, num_partitions=2)[1]
 
-  preds_flat = tf.reshape(pred_classes, [-1, ])
+  preds_flat = tf.reshape(pred_classes, [1, ])
   valid_preds = tf.dynamic_partition(preds_flat, valid_indices, num_partitions=2)[1]
   confusion_matrix = tf.confusion_matrix(valid_labels, valid_preds, num_classes=num_classes_gender)
 
@@ -341,6 +342,11 @@ def resnetv2_model_fn(features, labels, mode, params):
   else:
     train_var_list = [v for v in tf.trainable_variables()
                       if 'beta' not in v.name and 'gamma' not in v.name]
+
+# Regression loss
+
+  err = tf.subtract(labels, [0, ], pred_age, 'Error')
+  lossOut = tf.losses.mean_squared_error(truth, prediction)
 
   # Add weight decay to the loss.
   with tf.variable_scope("total_loss"):
