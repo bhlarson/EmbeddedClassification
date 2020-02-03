@@ -257,7 +257,7 @@ def align_resnet_v2_generator(block_fn, layers, data_format=None):
 
   return model
 
-def resnet_v2(resnet_size, data_format=None):
+def resnet_v2(eatures, labels, mode, params):
   """Returns the ResNet model for a given size and number of output classes."""
   model_params = {
       18: {'block': building_block, 'layers': [2, 2, 2, 2]},
@@ -268,10 +268,10 @@ def resnet_v2(resnet_size, data_format=None):
       200: {'block': bottleneck_block, 'layers': [3, 24, 36, 3]}
   }
 
-  if resnet_size not in model_params:
-    raise ValueError('Not a valid resnet_size:', resnet_size)
+  if params['resnet_size']  not in model_params:
+    raise ValueError('Not a valid resnet_size:', params['resnet_size'])
 
-  params = model_params[resnet_size]
+  params = model_params[params['resnet_size']]
   return align_resnet_v2_generator(params['block'], params['layers'], data_format)
 
 
@@ -309,52 +309,50 @@ def resnetv2_model_fn(features, labels, mode, params):
         predictions=predictions,
 
   # Prepare data for both train and eval modes
-  gt_decoded_labels = tf.py_func(preprocessing.decode_labels,
-                                 [labels, params['batch_size'], num_classes_gender], tf.uint8)
+  #gt_decoded_labels = tf.py_func(preprocessing.decode_labels,
+  #                               [labels, params['batch_size'], num_classes_gender], tf.uint8)
 
-  labels = tf.squeeze(labels, axis=3)  # reduce the channel dimension.
+  #labels = tf.squeeze(labels, axis=3)  # reduce the channel dimension.
 
   # Compute 
   logits_by_num_classes = tf.reshape(logits_gender, [-1, num_classes_gender])
-  labels_flat = tf.reshape(labels, [1, ])
+  #labels_flat = tf.reshape(labels, [1, ])
 
   valid_indices = tf.to_int32(labels_flat <= num_classes_gender - 1)
   valid_logits = tf.dynamic_partition(logits_by_num_classes, valid_indices, num_partitions=2)[1]
-  valid_labels = tf.dynamic_partition(labels_flat, valid_indices, num_partitions=2)[1]
+  #valid_labels = tf.dynamic_partition(labels_flat, valid_indices, num_partitions=2)[1]
 
-  preds_flat = tf.reshape(pred_classes, [1, ])
-  valid_preds = tf.dynamic_partition(preds_flat, valid_indices, num_partitions=2)[1]
-  confusion_matrix = tf.confusion_matrix(valid_labels, valid_preds, num_classes=num_classes_gender)
+  #preds_flat = tf.reshape(pred_classes, [1, ])
+  #valid_preds = tf.dynamic_partition(preds_flat, valid_indices, num_partitions=2)[1]
+  gender_confusion_matrix = tf.confusion_matrix(labels['gender'], valid_preds, num_classes=num_classes_gender)
 
-  predictions['valid_preds'] = valid_preds
-  predictions['valid_labels'] = valid_labels
-  predictions['confusion_matrix'] = confusion_matrix
+  predictions['pred_gender'] = pred_gender
+  predictions['label_gender'] = labels['gender']
+  predictions['confusion_matrix'] = gender_confusion_matrix
+  predictions['pred_age'] = pred_age
+  predictions['label_age'] = labels['age']
 
   cross_entropy = tf.losses.sparse_softmax_cross_entropy(
-      logits=valid_logits, labels=valid_labels)
+      logits=valid_logits, labels=labels['gender'])
 
   # Create a tensor named cross_entropy for logging purposes.
   tf.identity(cross_entropy, name='cross_entropy')
   tf.summary.scalar('cross_entropy', cross_entropy)
 
-  if not params['freeze_batch_norm']:
-    train_var_list = [v for v in tf.trainable_variables()]
-  else:
-    train_var_list = [v for v in tf.trainable_variables()
-                      if 'beta' not in v.name and 'gamma' not in v.name]
-
 # Regression loss
-
-  err = tf.subtract(labels, [0, ], pred_age, 'Error')
-  lossOut = tf.losses.mean_squared_error(truth, prediction)
+  err = tf.subtract(labels['age'], [0, ], pred_age, 'Error')
+  loss_mse = tf.losses.mean_squared_error(labels['age'], pred_age)
 
   # Add weight decay to the loss.
   with tf.variable_scope("total_loss"):
-    loss = cross_entropy + params.get('weight_decay', _WEIGHT_DECAY) * tf.add_n(
-        [tf.nn.l2_loss(v) for v in train_var_list])
+    loss = params['kGender']*cross_entropy + params['kAge']*loss_mse
+
   # loss = tf.losses.get_total_loss()  # obtain the regularization losses as well
 
   if mode == tf.estimator.ModeKeys.TRAIN:
+
+tf.estimator.EstimatorSpec
+
     tf.summary.image('images',
                      tf.concat(axis=2, values=[images, gt_decoded_labels, pred_decoded_labels]),
                      max_outputs=params['tensorboard_images_max_outputs'])  # Concatenate row-wise.
