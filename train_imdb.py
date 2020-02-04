@@ -9,7 +9,6 @@ import os
 import sys
 
 import tensorflow as tf
-import deeplab_model
 import resnet_model
 from utils import preprocessing
 from tensorflow.python import debug as tf_debug

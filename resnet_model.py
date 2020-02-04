@@ -6,10 +6,10 @@ from __future__ import print_function
 
 import tensorflow as tf
 
-from tensorflow.contrib.slim.nets import resnet_v2
-from tensorflow.contrib import layers as layers_lib
-from tensorflow.contrib.framework.python.ops import arg_scope
-from tensorflow.contrib.layers.python.layers import layers
+#from tensorflow.contrib.slim.nets import resnet_v2
+#from tensorflow.contrib import layers as layers_lib
+#from tensorflow.contrib.framework.python.ops import arg_scope
+#from tensorflow.contrib.layers.python.layers import layers
 
 from utils import preprocessing
 
@@ -306,84 +306,61 @@ def resnetv2_model_fn(features, labels, mode, params):
   if mode == tf.estimator.ModeKeys.PREDICT:
     return tf.estimator.EstimatorSpec(
         mode=mode,
-        predictions=predictions,
+        predictions=predictions)
 
   # Prepare data for both train and eval modes
-  #gt_decoded_labels = tf.py_func(preprocessing.decode_labels,
-  #                               [labels, params['batch_size'], num_classes_gender], tf.uint8)
+  #gender_confusion_matrix = tf.confusion_matrix(labels['gender'], pred_gender, num_classes=num_classes_gender)
 
-  #labels = tf.squeeze(labels, axis=3)  # reduce the channel dimension.
-
-  # Compute 
-  logits_by_num_classes = tf.reshape(logits_gender, [-1, num_classes_gender])
-  #labels_flat = tf.reshape(labels, [1, ])
-
-  valid_indices = tf.to_int32(labels_flat <= num_classes_gender - 1)
-  valid_logits = tf.dynamic_partition(logits_by_num_classes, valid_indices, num_partitions=2)[1]
-  #valid_labels = tf.dynamic_partition(labels_flat, valid_indices, num_partitions=2)[1]
-
-  #preds_flat = tf.reshape(pred_classes, [1, ])
-  #valid_preds = tf.dynamic_partition(preds_flat, valid_indices, num_partitions=2)[1]
-  gender_confusion_matrix = tf.confusion_matrix(labels['gender'], valid_preds, num_classes=num_classes_gender)
-
-  predictions['pred_gender'] = pred_gender
   predictions['label_gender'] = labels['gender']
-  predictions['confusion_matrix'] = gender_confusion_matrix
-  predictions['pred_age'] = pred_age
   predictions['label_age'] = labels['age']
+  #predictions['confusion_matrix'] = gender_confusion_matrix
 
+  # Classification loss
   cross_entropy = tf.losses.sparse_softmax_cross_entropy(
-      logits=valid_logits, labels=labels['gender'])
+      logits=logits_gender, labels=labels['gender'])
 
   # Create a tensor named cross_entropy for logging purposes.
-  tf.identity(cross_entropy, name='cross_entropy')
-  tf.summary.scalar('cross_entropy', cross_entropy)
+  tf.identity(cross_entropy, name='classification_cross_entropy')
+  tf.summary.scalar('classification_cross_entropy', cross_entropy)
 
-# Regression loss
-  err = tf.subtract(labels['age'], [0, ], pred_age, 'Error')
+  # Regression loss
   loss_mse = tf.losses.mean_squared_error(labels['age'], pred_age)
 
-  # Add weight decay to the loss.
-  with tf.variable_scope("total_loss"):
-    loss = params['kGender']*cross_entropy + params['kAge']*loss_mse
+  # Create a tensor named cross_entropy for logging purposes.
+  tf.identity(loss_mse, name='regression_mse')
+  tf.summary.scalar('regression_mse', loss_mse)
 
-  # loss = tf.losses.get_total_loss()  # obtain the regularization losses as well
+  # Add weight decay to the loss.
+  tf.math.scalar_mul(params['kGender'], cross_entropy)
+  tf.math.scalar_mul(params['kAge'], loss_mse)
+  with tf.variable_scope("total_loss"):
+    loss = tf.math.add(
+      tf.math.scalar_mul(params['kGender'], cross_entropy),
+      tf.math.scalar_mul(params['kAge'], loss_mse),
+      name=loss)
+
+  if mode == tf.estimator.ModeKeys.EVAL:
+    # Compute evaluation metrics.
+    #metrics = {'accuracy': accuracy}
+    metrics = {}
+    return tf.estimator.EstimatorSpec(mode, loss=loss, eval_metric_ops=metrics)
 
   if mode == tf.estimator.ModeKeys.TRAIN:
+    optimizer = tf.train.AdamOptimizer(params['learning_rate'])
+    train_op = optimizer.minimize(pred_loss, global_step=tf.train.get_global_step())
 
-tf.estimator.EstimatorSpec
+    return tf.estimator.EstimatorSpec(mode, loss=loss, train_op=train_op)
 
+'''
+  if mode == tf.estimator.ModeKeys.TRAIN:
     tf.summary.image('images',
                      tf.concat(axis=2, values=[images, gt_decoded_labels, pred_decoded_labels]),
                      max_outputs=params['tensorboard_images_max_outputs'])  # Concatenate row-wise.
 
     global_step = tf.train.get_or_create_global_step()
 
-    if params['learning_rate_policy'] == 'piecewise':
-      # Scale the learning rate linearly with the batch size. When the batch size
-      # is 128, the learning rate should be 0.1.
-      initial_learning_rate = 0.1 * params['batch_size'] / 128
-      batches_per_epoch = params['num_train'] / params['batch_size']
-      # Multiply the learning rate by 0.1 at 100, 150, and 200 epochs.
-      boundaries = [int(batches_per_epoch * epoch) for epoch in [100, 150, 200]]
-      values = [initial_learning_rate * decay for decay in [1, 0.1, 0.01, 0.001]]
-      learning_rate = tf.train.piecewise_constant(
-          tf.cast(global_step, tf.int32), boundaries, values)
-    elif params['learning_rate_policy'] == 'poly':
-      learning_rate = tf.train.polynomial_decay(
-          params['initial_learning_rate'],
-          tf.cast(global_step, tf.int32) - params['initial_global_step'],
-          params['max_iter'], params['end_learning_rate'], power=params['power'])
-    else:
-      raise ValueError('Learning rate policy must be "piecewise" or "poly"')
-
-    # Create a tensor named learning_rate for logging purposes
-    tf.identity(learning_rate, name='learning_rate')
-    tf.summary.scalar('learning_rate', learning_rate)
-
-    optimizer = tf.train.MomentumOptimizer(
-        learning_rate=learning_rate,
-        momentum=params['momentum'])
+    optimizer = tf.train.AdamOptimizer(params['learning_rate'])
+    keep_probability = tf.placeholder(tf.float32, name="keep_probabilty")
 
     # Batch norm requires update ops to be added as a dependency to the train_op
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
@@ -444,3 +421,4 @@ tf.estimator.EstimatorSpec
       loss=loss,
       train_op=train_op,
       eval_metric_ops=metrics)
+'''
