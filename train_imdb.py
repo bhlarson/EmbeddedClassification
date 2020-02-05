@@ -48,14 +48,15 @@ parser.add_argument('--learning_rate_policy', type=str, default='poly',
 parser.add_argument('--max_iter', type=int, default=30,
                     help='Number of maximum iteration used for "poly" learning rate policy.')
 
-parser.add_argument('--data_dir', type=str, default='C:\data\datasets\imdb',
+parser.add_argument('--data_dir', type=str, default='/store/datasets/imdb',
                     help='Path to the directory containing the imdb data tf record.')
 
 parser.add_argument('--base_architecture', type=str, default='resnet_v2_101',
                     choices=['resnet_v2_50', 'resnet_v2_101'],
                     help='The architecture of base Resnet building block.')
 
-parser.add_argument('--pre_trained_model', type=str, default='./trainings/resnet_v2_101_2017_04_14/resnet_v2_101.ckpt',
+# Pre-trained models: https://github.com/tensorflow/models/blob/master/research/slim/README.md
+parser.add_argument('--pre_trained_model', type=str, default='/store/training/resnet_v2_101_2017_04_14/resnet_v2_101.ckpt',
                     help='Path to the pre-trained model checkpoint.')
 
 parser.add_argument('--output_stride', type=int, default=16,
@@ -110,9 +111,9 @@ def get_filenames(is_training, data_dir):
     A list of file names.
   """
   if is_training:
-    return [os.path.join(data_dir, 'voc_train.record')]
+    return [os.path.join(data_dir, 'training.record')]
   else:
-    return [os.path.join(data_dir, 'voc_val.record')]
+    return [os.path.join(data_dir, 'validation.record')]
 
 
 def parse_record(raw_record):
