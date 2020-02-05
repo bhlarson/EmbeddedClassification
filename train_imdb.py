@@ -48,8 +48,8 @@ parser.add_argument('--learning_rate_policy', type=str, default='poly',
 parser.add_argument('--max_iter', type=int, default=30,
                     help='Number of maximum iteration used for "poly" learning rate policy.')
 
-parser.add_argument('--data_dir', type=str, default='./dataset/',
-                    help='Path to the directory containing the PASCAL VOC data tf record.')
+parser.add_argument('--data_dir', type=str, default='C:\data\datasets\imdb',
+                    help='Path to the directory containing the imdb data tf record.')
 
 parser.add_argument('--base_architecture', type=str, default='resnet_v2_101',
                     choices=['resnet_v2_50', 'resnet_v2_101'],
@@ -218,7 +218,7 @@ def main(unused_argv):
   # Set up a RunConfig to only save checkpoints once per training cycle.
   run_config = tf.estimator.RunConfig().replace(save_checkpoints_secs=1e9)
   model = tf.estimator.Estimator(
-      model_fn=deeplab_model.deeplabv3_model_fn,
+      model_fn=resnet_model.resnetv2_model_fn,
       model_dir=FLAGS.model_dir,
       config=run_config,
       params={
