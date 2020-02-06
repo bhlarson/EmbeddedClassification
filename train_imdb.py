@@ -48,7 +48,9 @@ parser.add_argument('--learning_rate_policy', type=str, default='poly',
 parser.add_argument('--max_iter', type=int, default=30,
                     help='Number of maximum iteration used for "poly" learning rate policy.')
 
-parser.add_argument('--data_dir', type=str, default='/store/datasets/imdb',
+parser.add_argument('--data_dir', type=str, 
+                    #default='/store/datasets/imdb',
+                    default='C:\\data\\datasets\\imdb',
                     help='Path to the directory containing the imdb data tf record.')
 
 parser.add_argument('--base_architecture', type=str, default='resnet_v2_101',
@@ -56,7 +58,9 @@ parser.add_argument('--base_architecture', type=str, default='resnet_v2_101',
                     help='The architecture of base Resnet building block.')
 
 # Pre-trained models: https://github.com/tensorflow/models/blob/master/research/slim/README.md
-parser.add_argument('--pre_trained_model', type=str, default='/store/training/resnet_v2_101_2017_04_14/resnet_v2_101.ckpt',
+parser.add_argument('--pre_trained_model', type=str, 
+                    #default='/store/training/resnet_v2_101_2017_04_14/resnet_v2_101.ckpt',
+                    default='C:\\data\\training\\resnet_v2_101_2017_04_14\\resnet_v2_101.ckpt',
                     help='Path to the pre-trained model checkpoint.')
 
 parser.add_argument('--output_stride', type=int, default=16,
@@ -111,9 +115,9 @@ def get_filenames(is_training, data_dir):
     A list of file names.
   """
   if is_training:
-    return [os.path.join(data_dir, 'training.record')]
+    return [os.path.join(data_dir, 'training.tfrecord')]
   else:
-    return [os.path.join(data_dir, 'validation.record')]
+    return [os.path.join(data_dir, 'validation.tfrecord')]
 
 
 def parse_record(raw_record):
@@ -122,25 +126,23 @@ def parse_record(raw_record):
         'height':  tf.FixedLenFeature((), tf.int64),
         'width':  tf.FixedLenFeature((), tf.int64),
         'depth':  tf.FixedLenFeature((), tf.int64),
-        'gender': tf.FixedLenFeature((), tf.float64),
-        'age': tf.FixedLenFeature((), tf.float64),
+        'gender': tf.FixedLenFeature((), tf.float32),
+        'age': tf.FixedLenFeature((), tf.float32),
         'path': tf.FixedLenFeature((), tf.string, default_value=''),
         'image': tf.FixedLenFeature((), tf.string, default_value=''),
   }
 
   parsed = tf.parse_single_example(raw_record, feature)
 
-  # height = tf.cast(parsed['image/height'], tf.int32)
-  # width = tf.cast(parsed['image/width'], tf.int32)
+  image = tf.io.decode_raw(parsed['image'], tf.uint8)
+  image_shape = tf.stack([parsed['height'], parsed['width'], parsed['depth']])
+  image = tf.reshape(image, image_shape)
 
-  image = tf.image.decode_image(tf.reshape(parsed['image'], shape=[]), _DEPTH)
-  image = tf.to_float(tf.image.convert_image_dtype(image, dtype=tf.uint8))
-  image.set_shape([None, None, 3])
-
+  name = parsed['subject']
   gender = parsed['gender']
   age = parsed['age']
 
-  return image, gender, age
+  return image, gender, age, name
 
 
 def preprocess_image(image, label, is_training):
@@ -181,15 +183,15 @@ def input_fn(is_training, data_dir, batch_size, num_epochs=1):
   dataset = tf.data.Dataset.from_tensor_slices(get_filenames(is_training, data_dir))
   dataset = dataset.flat_map(tf.data.TFRecordDataset)
 
-  if is_training:
+  #if is_training:
     # When choosing shuffle buffer sizes, larger sizes result in better
     # randomness, while smaller sizes have better performance.
     # is a relatively small dataset, we choose to shuffle the full epoch.
-    dataset = dataset.shuffle(buffer_size=_NUM_IMAGES['train'])
+    #dataset = dataset.shuffle(buffer_size=_NUM_IMAGES['train'])
 
   dataset = dataset.map(parse_record)
-  dataset = dataset.map(
-      lambda image, label: preprocess_image(image, label, is_training))
+  #dataset = dataset.map(
+  #    lambda image, label: preprocess_image(image, label, is_training))
   dataset = dataset.prefetch(batch_size)
 
   # We call repeat after shuffling, rather than before, to prevent separate
