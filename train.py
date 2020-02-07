@@ -119,32 +119,32 @@ def parse_record(raw_record):
   """Parse PASCAL image and label from a tf record."""
   keys_to_features = {
       'image/height':
-      tf.FixedLenFeature((), tf.int64),
+      tf.io.FixedLenFeature((), tf.int64),
       'image/width':
-      tf.FixedLenFeature((), tf.int64),
+      tf.io.FixedLenFeature((), tf.int64),
       'image/encoded':
-      tf.FixedLenFeature((), tf.string, default_value=''),
+      tf.io.FixedLenFeature((), tf.string, default_value=''),
       'image/format':
-      tf.FixedLenFeature((), tf.string, default_value='jpeg'),
+      tf.io.FixedLenFeature((), tf.string, default_value='jpeg'),
       'label/encoded':
-      tf.FixedLenFeature((), tf.string, default_value=''),
+      tf.io.FixedLenFeature((), tf.string, default_value=''),
       'label/format':
-      tf.FixedLenFeature((), tf.string, default_value='png'),
+      tf.io.FixedLenFeature((), tf.string, default_value='png'),
   }
 
-  parsed = tf.parse_single_example(raw_record, keys_to_features)
+  parsed = tf.io.parse_single_example(serialized=raw_record, features=keys_to_features)
 
   # height = tf.cast(parsed['image/height'], tf.int32)
   # width = tf.cast(parsed['image/width'], tf.int32)
 
   image = tf.image.decode_image(
       tf.reshape(parsed['image/encoded'], shape=[]), _DEPTH)
-  image = tf.to_float(tf.image.convert_image_dtype(image, dtype=tf.uint8))
+  image = tf.cast(tf.image.convert_image_dtype(image, dtype=tf.uint8), dtype=tf.float32)
   image.set_shape([None, None, 3])
 
   label = tf.image.decode_image(
       tf.reshape(parsed['label/encoded'], shape=[]), 1)
-  label = tf.to_int32(tf.image.convert_image_dtype(label, dtype=tf.uint8))
+  label = tf.cast(tf.image.convert_image_dtype(label, dtype=tf.uint8), dtype=tf.int32)
   label.set_shape([None, None, 1])
 
   return image, label
@@ -204,7 +204,7 @@ def input_fn(is_training, data_dir, batch_size, num_epochs=1):
   dataset = dataset.repeat(num_epochs)
   dataset = dataset.batch(batch_size)
 
-  iterator = dataset.make_one_shot_iterator()
+  iterator = tf.compat.v1.data.make_one_shot_iterator(dataset)
   images, labels = iterator.get_next()
 
   return images, labels
@@ -212,7 +212,7 @@ def input_fn(is_training, data_dir, batch_size, num_epochs=1):
 def serving_input_fn():
     shape = [_WIDTH, _HEIGHT, _DEPTH]
     features = {
-        "image" : tf.FixedLenFeature(shape=shape, dtype=tf.uint8),
+        "image" : tf.io.FixedLenFeature(shape=shape, dtype=tf.uint8),
     }
     return tf.estimator.export.build_parsing_serving_input_receiver_fn(features)
 
@@ -257,7 +257,7 @@ def main(unused_argv):
       'train_mean_iou': 'train_mean_iou',
     }
 
-    logging_hook = tf.train.LoggingTensorHook(
+    logging_hook = tf.estimator.LoggingTensorHook(
         tensors=tensors_to_log, every_n_iter=10)
     train_hooks = [logging_hook]
     eval_hooks = None
@@ -267,14 +267,14 @@ def main(unused_argv):
       train_hooks.append(debug_hook)
       eval_hooks = [debug_hook]
 
-    tf.logging.info("Start training.")
+    tf.compat.v1.logging.info("Start training.")
     model.train(
         input_fn=lambda: input_fn(True, FLAGS.data_dir, FLAGS.batch_size, FLAGS.epochs_per_eval),
         hooks=train_hooks,
         # steps=1  # For debug
     )
 
-    tf.logging.info("Start evaluation.")
+    tf.compat.v1.logging.info("Start evaluation.")
     # Evaluate the model and print results
     eval_results = model.evaluate(
         # Batch size must be 1 for testing because the images' size differs
@@ -288,6 +288,6 @@ def main(unused_argv):
 
 
 if __name__ == '__main__':
-  tf.logging.set_verbosity(tf.logging.INFO)
+  tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.INFO)
   FLAGS, unparsed = parser.parse_known_args()
-  tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)
+  tf.compat.v1.app.run(main=main, argv=[sys.argv[0]] + unparsed)

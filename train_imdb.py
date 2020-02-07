@@ -122,51 +122,38 @@ def get_filenames(is_training, data_dir):
 
 def parse_record(raw_record):
   feature = {
-        'subject':  tf.FixedLenFeature((), tf.string, default_value=''),
-        'height':  tf.FixedLenFeature((), tf.int64),
-        'width':  tf.FixedLenFeature((), tf.int64),
-        'depth':  tf.FixedLenFeature((), tf.int64),
-        'gender': tf.FixedLenFeature((), tf.float32),
-        'age': tf.FixedLenFeature((), tf.float32),
-        'path': tf.FixedLenFeature((), tf.string, default_value=''),
-        'image': tf.FixedLenFeature((), tf.string, default_value=''),
+        'subject':  tf.io.FixedLenFeature((), tf.string, default_value=''),
+        'height':  tf.io.FixedLenFeature((), tf.int64),
+        'width':  tf.io.FixedLenFeature((), tf.int64),
+        'depth':  tf.io.FixedLenFeature((), tf.int64),
+        'gender': tf.io.FixedLenFeature((), tf.float32),
+        'age': tf.io.FixedLenFeature((), tf.float32),
+        'path': tf.io.FixedLenFeature((), tf.string, default_value=''),
+        'image': tf.io.FixedLenFeature((), tf.string, default_value=''),
   }
 
-  parsed = tf.parse_single_example(raw_record, feature)
+  parsed = tf.io.parse_single_example(serialized=raw_record, features=feature)
 
   image = tf.io.decode_raw(parsed['image'], tf.uint8)
   image_shape = tf.stack([parsed['height'], parsed['width'], parsed['depth']])
   image = tf.reshape(image, image_shape)
 
-  name = parsed['subject']
-  gender = parsed['gender']
-  age = parsed['age']
-
-  return image, gender, age, name
-
-
-def preprocess_image(image, label, is_training):
-  """Preprocess a single image of layout [height, width, depth]."""
-  if is_training:
-    # Randomly scale the image and label.
-    image, label = preprocessing.random_rescale_image_and_label(
-        image, label, _MIN_SCALE, _MAX_SCALE)
-
-    # Randomly crop or pad a [_HEIGHT, _WIDTH] section of the image and label.
-    image, label = preprocessing.random_crop_or_pad_image_and_label(
-        image, label, _HEIGHT, _WIDTH, _IGNORE_LABEL)
-
-    # Randomly flip the image and label horizontally.
-    image, label = preprocessing.random_flip_left_right_image_and_label(
-        image, label)
-
-    image.set_shape([_HEIGHT, _WIDTH, 3])
-    label.set_shape([_HEIGHT, _WIDTH, 1])
-
-  image = preprocessing.mean_image_subtraction(image)
+  label = {'name':parsed['subject'], 'gender':parsed['gender'], 'age':parsed['age']}
 
   return image, label
 
+
+def PrepareImage(image, label, is_training):
+  """Preprocess a single image of layout [height, width, depth]."""
+  image = tf.image.resize_with_crop_or_pad(image,_HEIGHT,_WIDTH)
+
+  if is_training:
+    # Randomly flip the image and label horizontally.
+    image = tf.image.random_flip_left_right(image)
+
+  image = tf.image.per_image_standardization(image)
+
+  return image, label
 
 def input_fn(is_training, data_dir, batch_size, num_epochs=1):
   """Input_fn using the tf.data input pipeline for CIFAR-10 dataset.
@@ -182,32 +169,27 @@ def input_fn(is_training, data_dir, batch_size, num_epochs=1):
   """
   dataset = tf.data.Dataset.from_tensor_slices(get_filenames(is_training, data_dir))
   dataset = dataset.flat_map(tf.data.TFRecordDataset)
-
-  #if is_training:
+  
+  if is_training:
     # When choosing shuffle buffer sizes, larger sizes result in better
     # randomness, while smaller sizes have better performance.
-    # is a relatively small dataset, we choose to shuffle the full epoch.
-    #dataset = dataset.shuffle(buffer_size=_NUM_IMAGES['train'])
+    dataset = dataset.shuffle(buffer_size=100)
 
   dataset = dataset.map(parse_record)
-  #dataset = dataset.map(
-  #    lambda image, label: preprocess_image(image, label, is_training))
+  dataset = dataset.map(lambda image, label: PrepareImage(image, label, is_training))
   dataset = dataset.prefetch(batch_size)
 
   # We call repeat after shuffling, rather than before, to prevent separate
   # epochs from blending together.
-  dataset = dataset.repeat(num_epochs)
   dataset = dataset.batch(batch_size)
+  dataset = dataset.repeat(num_epochs)
 
-  iterator = dataset.make_one_shot_iterator()
-  images, labels = iterator.get_next()
-
-  return images, labels
+  return dataset
 
 def serving_input_fn():
     shape = [_WIDTH, _HEIGHT, _DEPTH]
     features = {
-        "image" : tf.FixedLenFeature(shape=shape, dtype=tf.uint8),
+        "image" : tf.io.FixedLenFeature(shape=shape, dtype=tf.uint8),
     }
     return tf.estimator.export.build_parsing_serving_input_receiver_fn(features)
 
@@ -241,7 +223,11 @@ def main(unused_argv):
           'power': _POWER,
           'momentum': _MOMENTUM,
           'freeze_batch_norm': FLAGS.freeze_batch_norm,
-          'initial_global_step': FLAGS.initial_global_step
+          'initial_global_step': FLAGS.initial_global_step,
+          # Used
+          'resnet_size': 101,
+          'kGender': 1.0,
+          'kAge':1.0,
       })
 
   for _ in range(FLAGS.train_epochs // FLAGS.epochs_per_eval):
@@ -252,7 +238,7 @@ def main(unused_argv):
       'train_mean_iou': 'train_mean_iou',
     }
 
-    logging_hook = tf.train.LoggingTensorHook(
+    logging_hook = tf.estimator.LoggingTensorHook(
         tensors=tensors_to_log, every_n_iter=10)
     train_hooks = [logging_hook]
     eval_hooks = None
@@ -262,14 +248,14 @@ def main(unused_argv):
       train_hooks.append(debug_hook)
       eval_hooks = [debug_hook]
 
-    tf.logging.info("Start training.")
+    tf.compat.v1.logging.info("Start training.")
     model.train(
         input_fn=lambda: input_fn(True, FLAGS.data_dir, FLAGS.batch_size, FLAGS.epochs_per_eval),
         hooks=train_hooks,
         # steps=1  # For debug
     )
 
-    tf.logging.info("Start evaluation.")
+    tf.compat.v1.logging.info("Start evaluation.")
     # Evaluate the model and print results
     eval_results = model.evaluate(
         # Batch size must be 1 for testing because the images' size differs
@@ -283,6 +269,6 @@ def main(unused_argv):
 
 
 if __name__ == '__main__':
-  tf.logging.set_verbosity(tf.logging.INFO)
+  tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.INFO)
   FLAGS, unparsed = parser.parse_known_args()
-  tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)
+  tf.compat.v1.app.run(main=main, argv=[sys.argv[0]] + unparsed)

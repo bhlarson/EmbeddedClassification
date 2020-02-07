@@ -57,7 +57,7 @@ def read_examples_list(path):
   Returns:
     list of example identifiers (strings).
   """
-  with tf.gfile.GFile(path) as fid:
+  with tf.io.gfile.GFile(path) as fid:
     lines = fid.readlines()
   return [line.strip().split(' ')[0] for line in lines]
 
@@ -100,8 +100,8 @@ def make_initializable_iterator(dataset):
   Returns:
     A `tf.data.Iterator`.
   """
-  iterator = dataset.make_initializable_iterator()
-  tf.add_to_collection(tf.GraphKeys.TABLE_INITIALIZERS, iterator.initializer)
+  iterator = tf.compat.v1.data.make_initializable_iterator(dataset)
+  tf.compat.v1.add_to_collection(tf.compat.v1.GraphKeys.TABLE_INITIALIZERS, iterator.initializer)
   return iterator
 
 
@@ -123,7 +123,7 @@ def read_dataset(
     A tf.data.Dataset based on config.
   """
   # Shard, shuffle, and read files.
-  filenames = tf.concat([tf.matching_files(pattern) for pattern in input_files],
+  filenames = tf.concat([tf.io.matching_files(pattern) for pattern in input_files],
                         0)
   dataset = tf.data.Dataset.from_tensor_slices(filenames)
   dataset = dataset.shard(num_workers, worker_index)
@@ -136,7 +136,7 @@ def read_dataset(
   # If cycle_length is larger than the number of files, more than one reader
   # will be assigned to the same file, leading to repetition.
   cycle_length = tf.cast(
-      tf.minimum(config.num_readers, tf.size(filenames)), tf.int64)
+      tf.minimum(config.num_readers, tf.size(input=filenames)), tf.int64)
   # TODO: find the optimal block_length.
   dataset = dataset.interleave(
       file_read_func, cycle_length=cycle_length, block_length=1)

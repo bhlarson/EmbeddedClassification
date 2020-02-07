@@ -42,7 +42,7 @@ def batch_norm_relu(inputs, is_training, data_format):
   """Performs a batch normalization followed by a ReLU."""
   # We set fused=True for a significant performance boost. See
   # https://www.tensorflow.org/performance/performance_guide#common_fused_ops
-  inputs = tf.layers.batch_normalization(
+  inputs = tf.compat.v1.layers.batch_normalization(
       inputs=inputs, axis=1 if data_format == 'channels_first' else 3,
       momentum=_BATCH_NORM_DECAY, epsilon=_BATCH_NORM_EPSILON, center=True,
       scale=True, training=is_training, fused=True)
@@ -69,10 +69,10 @@ def fixed_padding(inputs, kernel_size, data_format):
   pad_end = pad_total - pad_beg
 
   if data_format == 'channels_first':
-    padded_inputs = tf.pad(inputs, [[0, 0], [0, 0],
+    padded_inputs = tf.pad(tensor=inputs, paddings=[[0, 0], [0, 0],
                                     [pad_beg, pad_end], [pad_beg, pad_end]])
   else:
-    padded_inputs = tf.pad(inputs, [[0, 0], [pad_beg, pad_end],
+    padded_inputs = tf.pad(tensor=inputs, paddings=[[0, 0], [pad_beg, pad_end],
                                     [pad_beg, pad_end], [0, 0]])
   return padded_inputs
 
@@ -84,10 +84,10 @@ def conv2d_fixed_padding(inputs, filters, kernel_size, strides, data_format):
   if strides > 1:
     inputs = fixed_padding(inputs, kernel_size, data_format)
 
-  return tf.layers.conv2d(
+  return tf.compat.v1.layers.conv2d(
       inputs=inputs, filters=filters, kernel_size=kernel_size, strides=strides,
       padding=('SAME' if strides == 1 else 'VALID'), use_bias=False,
-      kernel_initializer=tf.variance_scaling_initializer(),
+      kernel_initializer=tf.compat.v1.variance_scaling_initializer(),
       data_format=data_format)
 
 
@@ -238,13 +238,13 @@ def align_resnet_v2_generator(block_fn, layers, num_classes, data_format=None):
       # Convert the inputs from channels_last (NHWC) to channels_first (NCHW).
       # This provides a large performance boost on GPU. See
       # https://www.tensorflow.org/performance/performance_guide#data_formats
-      inputs = tf.transpose(inputs, [0, 3, 1, 2])
+      inputs = tf.transpose(a=inputs, perm=[0, 3, 1, 2])
 
     inputs = conv2d_fixed_padding(
         inputs=inputs, filters=64, kernel_size=7, strides=2,
         data_format=data_format)
     inputs = tf.identity(inputs, 'initial_conv')
-    inputs = tf.layers.max_pooling2d(
+    inputs = tf.compat.v1.layers.max_pooling2d(
         inputs=inputs, pool_size=3, strides=2, padding='SAME',
         data_format=data_format)
     inputs = tf.identity(inputs, 'initial_max_pool')
@@ -267,12 +267,12 @@ def align_resnet_v2_generator(block_fn, layers, num_classes, data_format=None):
         data_format=data_format)
 
     inputs = batch_norm_relu(inputs, is_training, data_format)
-    inputs = tf.layers.average_pooling2d(
+    inputs = tf.compat.v1.layers.average_pooling2d(
         inputs=inputs, pool_size=7, strides=1, padding='VALID',
         data_format=data_format)
     inputs = tf.identity(inputs, 'final_avg_pool')
     inputs = tf.reshape(inputs,[-1, 512 if block_fn is building_block else 2048])
-    inputs = tf.layers.dense(inputs=inputs, units=num_classes)
+    inputs = tf.compat.v1.layers.dense(inputs=inputs, units=num_classes)
     inputs = tf.identity(inputs, 'final_dense')
     return inputs
 
@@ -310,11 +310,11 @@ class ClassifyResnet(object):
         :return: predictions
         """
 
-        with tf.variable_scope("inference"):
+        with tf.compat.v1.variable_scope("inference"):
 
             network = resnet_v2(self.resnetSize, self.num_classes, self.data_format)
             logits = network(inputs=images, is_training=self.training )
-            classification = tf.argmax(logits, axis=1)
+            classification = tf.argmax(input=logits, axis=1)
             softmax = tf.nn.softmax(logits, name='softmax_tensor')
 
             return logits, classification, softmax
@@ -323,7 +323,7 @@ class ClassifyResnet(object):
         logits, _, _ = self.inference(images, dropout_keep_prob)
         # Calculate loss, which includes softmax cross entropy and L2 regularization.
         #cross_entropy = tf.losses.softmax_cross_entropy( onehot_labels=labels, logits=predictions['logits'])
-        cross_entropy = tf.nn.softmax_cross_entropy_with_logits(labels=labels, logits=logits, name='cross_entropy')
-        loss = tf.reduce_mean(cross_entropy, name='cross_entropy')
+        cross_entropy = tf.nn.softmax_cross_entropy_with_logits(labels=tf.stop_gradient(labels), logits=logits, name='cross_entropy')
+        loss = tf.reduce_mean(input_tensor=cross_entropy, name='cross_entropy')
 
         return loss, logits

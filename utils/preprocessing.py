@@ -137,17 +137,17 @@ def random_rescale_image_and_label(image, label, min_scale, max_scale):
   elif min_scale >= max_scale:
     raise ValueError('\'max_scale\' must be greater than \'min_scale\'.')
 
-  shape = tf.shape(image)
-  height = tf.to_float(shape[0])
-  width = tf.to_float(shape[1])
-  scale = tf.random_uniform(
+  shape = tf.shape(input=image)
+  height = tf.cast(shape[0], dtype=tf.float32)
+  width = tf.cast(shape[1], dtype=tf.float32)
+  scale = tf.random.uniform(
       [], minval=min_scale, maxval=max_scale, dtype=tf.float32)
-  new_height = tf.to_int32(height * scale)
-  new_width = tf.to_int32(width * scale)
-  image = tf.image.resize_images(image, [new_height, new_width],
+  new_height = tf.cast(height * scale, dtype=tf.int32)
+  new_width = tf.cast(width * scale, dtype=tf.int32)
+  image = tf.image.resize(image, [new_height, new_width],
                                  method=tf.image.ResizeMethod.BILINEAR)
   # Since label classes are integers, nearest neighbor need to be used.
-  label = tf.image.resize_images(label, [new_height, new_width],
+  label = tf.image.resize(label, [new_height, new_width],
                                  method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
 
   return image, label
@@ -172,21 +172,21 @@ def random_crop_or_pad_image_and_label(image, label, crop_height, crop_width, ig
     `[new_height, new_width, channels]`.
   """
   label = label - ignore_label  # Subtract due to 0 padding.
-  label = tf.to_float(label)
-  image_height = tf.shape(image)[0]
-  image_width = tf.shape(image)[1]
+  label = tf.cast(label, dtype=tf.float32)
+  image_height = tf.shape(input=image)[0]
+  image_width = tf.shape(input=image)[1]
   image_and_label = tf.concat([image, label], axis=2)
   image_and_label_pad = tf.image.pad_to_bounding_box(
       image_and_label, 0, 0,
       tf.maximum(crop_height, image_height),
       tf.maximum(crop_width, image_width))
-  image_and_label_crop = tf.random_crop(
+  image_and_label_crop = tf.image.random_crop(
       image_and_label_pad, [crop_height, crop_width, 4])
 
   image_crop = image_and_label_crop[:, :, :3]
   label_crop = image_and_label_crop[:, :, 3:]
   label_crop += ignore_label
-  label_crop = tf.to_int32(label_crop)
+  label_crop = tf.cast(label_crop, dtype=tf.int32)
 
   return image_crop, label_crop
 
@@ -202,10 +202,10 @@ def random_flip_left_right_image_and_label(image, label):
     A 3-D tensor of the same type and shape as `image`.
     A 3-D tensor of the same type and shape as `label`.
   """
-  uniform_random = tf.random_uniform([], 0, 1.0)
+  uniform_random = tf.random.uniform([], 0, 1.0)
   mirror_cond = tf.less(uniform_random, .5)
-  image = tf.cond(mirror_cond, lambda: tf.reverse(image, [1]), lambda: image)
-  label = tf.cond(mirror_cond, lambda: tf.reverse(label, [1]), lambda: label)
+  image = tf.cond(pred=mirror_cond, true_fn=lambda: tf.reverse(image, [1]), false_fn=lambda: image)
+  label = tf.cond(pred=mirror_cond, true_fn=lambda: tf.reverse(label, [1]), false_fn=lambda: label)
 
   return image, label
 
@@ -229,9 +229,9 @@ def eval_input_fn(image_filenames, label_filenames=None, batch_size=1):
     else:
       image_filename, label_filename = filename
 
-    image_string = tf.read_file(image_filename)
+    image_string = tf.io.read_file(image_filename)
     image = tf.image.decode_image(image_string)
-    image = tf.to_float(tf.image.convert_image_dtype(image, dtype=tf.uint8))
+    image = tf.cast(tf.image.convert_image_dtype(image, dtype=tf.uint8), dtype=tf.float32)
     image.set_shape([None, None, 3])
 
     image = mean_image_subtraction(image)
@@ -239,9 +239,9 @@ def eval_input_fn(image_filenames, label_filenames=None, batch_size=1):
     if not is_label:
       return image
     else:
-      label_string = tf.read_file(label_filename)
+      label_string = tf.io.read_file(label_filename)
       label = tf.image.decode_image(label_string)
-      label = tf.to_int32(tf.image.convert_image_dtype(label, dtype=tf.uint8))
+      label = tf.cast(tf.image.convert_image_dtype(label, dtype=tf.uint8), dtype=tf.int32)
       label.set_shape([None, None, 1])
 
       return image, label
@@ -258,7 +258,7 @@ def eval_input_fn(image_filenames, label_filenames=None, batch_size=1):
     dataset = dataset.map(lambda x, y: _parse_function((x, y), True))
   dataset = dataset.prefetch(batch_size)
   dataset = dataset.batch(batch_size)
-  iterator = dataset.make_one_shot_iterator()
+  iterator = tf.compat.v1.data.make_one_shot_iterator(dataset)
 
   if label_filenames is None:
     images = iterator.get_next()

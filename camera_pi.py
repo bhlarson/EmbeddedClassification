@@ -47,8 +47,8 @@ for file in tar_file.getmembers():
 
 detection_graph = tf.Graph()
 with detection_graph.as_default():
-  od_graph_def = tf.GraphDef()
-  with tf.gfile.GFile(PATH_TO_FROZEN_GRAPH, 'rb') as fid:
+  od_graph_def = tf.compat.v1.GraphDef()
+  with tf.io.gfile.GFile(PATH_TO_FROZEN_GRAPH, 'rb') as fid:
     serialized_graph = fid.read()
     od_graph_def.ParseFromString(serialized_graph)
     tf.import_graph_def(od_graph_def, name='')
@@ -88,9 +88,9 @@ class Camera(BaseCamera):
             camera.resolution = (resX, resY)
 
             with   detection_graph.as_default():
-              with tf.Session() as sess:
+              with tf.compat.v1.Session() as sess:
                 # Get handles to input and output tensors
-                ops = tf.get_default_graph().get_operations()
+                ops = tf.compat.v1.get_default_graph().get_operations()
                 all_tensor_names = {output.name for op in ops for output in op.outputs}
                 tensor_dict = {}
                 for key in [
@@ -99,7 +99,7 @@ class Camera(BaseCamera):
                 ]:
                   tensor_name = key + ':0'
                   if tensor_name in all_tensor_names:
-                    tensor_dict[key] = tf.get_default_graph().get_tensor_by_name(
+                    tensor_dict[key] = tf.compat.v1.get_default_graph().get_tensor_by_name(
                         tensor_name)
                 if 'detection_masks' in tensor_dict:
                   # The following processing is only for single image
@@ -116,7 +116,7 @@ class Camera(BaseCamera):
                   # Follow the convention by adding back the batch dimension
                   tensor_dict['detection_masks'] = tf.expand_dims(
                       detection_masks_reframed, 0)
-                image_tensor = tf.get_default_graph().get_tensor_by_name('image_tensor:0')              
+                image_tensor = tf.compat.v1.get_default_graph().get_tensor_by_name('image_tensor:0')              
 
                 # let camera warm up
                 # time.sleep(2) camera startup duirng Tensorflow startup
