@@ -1,4 +1,4 @@
-"""Train a DeepLab v3 model using tf.estimator API."""
+"""Train a Resnet model for age classification and gender regression from the imdb dataset."""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -7,13 +7,19 @@ from __future__ import print_function
 import argparse
 import os
 import sys
+import shutil
 
 import tensorflow as tf
+
 import resnet_model
 from utils import preprocessing
 from tensorflow.python import debug as tf_debug
 
-import shutil
+print('Python Version {}'.format(sys.version))
+print('Tensorflow version {}'.format(tf.__version__))
+print('GPU Available: {}'.format(tf.test.is_gpu_available()))
+if(tf.test.is_gpu_available()):
+  print('GPU Devices: {}'.format(tf.test.gpu_device_name()))
 
 parser = argparse.ArgumentParser()
 
@@ -49,8 +55,8 @@ parser.add_argument('--max_iter', type=int, default=30,
                     help='Number of maximum iteration used for "poly" learning rate policy.')
 
 parser.add_argument('--data_dir', type=str, 
-                    default='/store/datasets/imdb',
-                    #default='C:\\data\\datasets\\imdb',
+                    #default='/store/datasets/imdb',
+                    default='C:\\data\\datasets\\imdb',
                     help='Path to the directory containing the imdb data tf record.')
 
 parser.add_argument('--base_architecture', type=str, default='resnet_v2_101',
@@ -59,8 +65,8 @@ parser.add_argument('--base_architecture', type=str, default='resnet_v2_101',
 
 # Pre-trained models: https://github.com/tensorflow/models/blob/master/research/slim/README.md
 parser.add_argument('--pre_trained_model', type=str, 
-                    default='/store/training/resnet_v2_101_2017_04_14/resnet_v2_101.ckpt',
-                    #default='C:\\data\\training\\resnet_v2_101_2017_04_14\\resnet_v2_101.ckpt',
+                    #default='/store/training/resnet_v2_101_2017_04_14/resnet_v2_101.ckpt',
+                    default='C:\\data\\training\\resnet_v2_101_2017_04_14\\resnet_v2_101.ckpt',
                     help='Path to the pre-trained model checkpoint.')
 
 parser.add_argument('--output_stride', type=int, default=16,
@@ -84,6 +90,10 @@ parser.add_argument('--weight_decay', type=float, default=2e-4,
 
 parser.add_argument('--debug', action='store_true',
                     help='Whether to use debugger to track down bad values during training.')
+
+parser.add_argument('--resnet_size', type=int, default=101,
+                    help='Resnet size (18, 34, 50, 101, 152, 200)')
+
 
 _NUM_CLASSES = 21
 _HEIGHT = 128
@@ -221,13 +231,7 @@ def main(unused_argv):
   if FLAGS.clean_model_dir:
     shutil.rmtree(FLAGS.model_dir, ignore_errors=True)
 
-  # Set up a RunConfig to only save checkpoints once per training cycle.
-  run_config = tf.estimator.RunConfig().replace(save_checkpoints_secs=1e9)
-  model = tf.estimator.Estimator(
-      model_fn=resnet_model.resnetv2_model_fn,
-      model_dir=FLAGS.model_dir,
-      config=run_config,
-      params={
+  params = {
           'output_stride': FLAGS.output_stride,
           'batch_size': FLAGS.batch_size,
           'base_architecture': FLAGS.base_architecture,
@@ -244,8 +248,17 @@ def main(unused_argv):
           'power': _POWER,
           'momentum': _MOMENTUM,
           'freeze_batch_norm': FLAGS.freeze_batch_norm,
-          'initial_global_step': FLAGS.initial_global_step
-      })
+          'initial_global_step': FLAGS.initial_global_step,
+          'resnet_size': FLAGS.resnet_size
+      }
+
+  # Set up a RunConfig to only save checkpoints once per training cycle.
+  run_config = tf.estimator.RunConfig().replace(save_checkpoints_secs=1e9)
+  model = tf.estimator.Estimator(
+      model_fn=resnet_model.resnetv2_model_fn,
+      model_dir=FLAGS.model_dir,
+      config=run_config,
+      params=params)
 
   for _ in range(FLAGS.train_epochs // FLAGS.epochs_per_eval):
     tensors_to_log = {
@@ -268,7 +281,7 @@ def main(unused_argv):
     tf.logging.info("Start training.")
     model.train(
         input_fn=lambda: input_fn(True, FLAGS.data_dir, FLAGS.batch_size, FLAGS.epochs_per_eval),
-        hooks=train_hooks,
+        hooks=train_hooks
         # steps=1  # For debug
     )
 

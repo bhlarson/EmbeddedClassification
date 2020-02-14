@@ -257,7 +257,7 @@ def align_resnet_v2_generator(block_fn, layers, data_format=None):
 
   return model
 
-def resnet_v2(features, labels, mode, params):
+def resnet_v2( resnet_size, data_format=None):
   """Returns the ResNet model for a given size and number of output classes."""
   model_params = {
       18: {'block': building_block, 'layers': [2, 2, 2, 2]},
@@ -268,11 +268,11 @@ def resnet_v2(features, labels, mode, params):
       200: {'block': bottleneck_block, 'layers': [3, 24, 36, 3]}
   }
 
-  if params['resnet_size']  not in model_params:
-    raise ValueError('Not a valid resnet_size:', params['resnet_size'])
+  if resnet_size  not in model_params:
+    raise ValueError('Not a valid resnet_size:', resnet_size)
 
-  params = model_params[params['resnet_size']]
-  return align_resnet_v2_generator(params['block'], params['layers'], data_format)
+  resnet_structure = model_params[resnet_size]
+  return align_resnet_v2_generator(resnet_structure['block'], resnet_structure['layers'], data_format)
 
 
 def resnetv2_model_fn(features, labels, mode, params):
@@ -280,17 +280,19 @@ def resnetv2_model_fn(features, labels, mode, params):
   if isinstance(features, dict):
     features = features['feature']
 
-  network = resnet_v2(params['resnetSize'])
+  network = resnet_v2(params['resnet_size'])
+
+  final = network(inputs=features, is_training= (mode==tf.estimator.ModeKeys.TRAIN) )
 
   # Male/female classification
   num_classes_gender = 2
-  inputs = tf.layers.dense(inputs=network, units=num_classes_gender)
+  inputs = tf.layers.dense(inputs=final, units=num_classes_gender)
   logits_gender = tf.identity(inputs, 'final_dense_gender')
   pred_gender = tf.argmax(logits_gender, axis=1, output_type=tf.int32)
 
   # Age regression
   num_classes_age = 1
-  final_dense_age = tf.layers.dense(inputs=inputs, units=num_classes_age)
+  final_dense_age = tf.layers.dense(inputs=final, units=num_classes_age)
   pred_age = tf.identity(final_dense_age, 'pred_age')
 
   predictions = {
@@ -343,7 +345,7 @@ def resnetv2_model_fn(features, labels, mode, params):
 
   if mode == tf.estimator.ModeKeys.TRAIN:
     optimizer = tf.train.AdamOptimizer(params['learning_rate'])
-    train_op = optimizer.minimize(pred_loss, global_step=tf.train.get_global_step())
+    train_op = optimizer.minimize(loss, global_step=tf.train.get_global_step())
 
     return tf.estimator.EstimatorSpec(mode, loss=loss, train_op=train_op)
 
