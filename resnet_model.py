@@ -13,8 +13,9 @@ import tensorflow as tf
 
 from utils import preprocessing
 
-_BATCH_NORM_DECAY = 0.9997
-_WEIGHT_DECAY = 5e-4
+_BATCH_NORM_DECAY = 0.997
+_BATCH_NORM_EPSILON = 1e-5
+INT_DENSE_SIZE = 128
 
 
 def batch_norm_relu(inputs, is_training, data_format):
@@ -288,7 +289,7 @@ def resnetv2_model_fn(features, labels, mode, params):
   num_classes_gender = 2
   inputs = tf.layers.dense(inputs=final, units=num_classes_gender)
   logits_gender = tf.identity(inputs, 'final_dense_gender')
-  pred_gender = tf.argmax(logits_gender, axis=1, output_type=tf.int32)
+  pred_gender = tf.argmax(logits_gender,axis=1)
 
   # Age regression
   num_classes_age = 1

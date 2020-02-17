@@ -80,7 +80,7 @@ class ImageReader(object):
       image_height and image_width.
     """
     image = self.decode_image(image_data)
-    return image.shape[:2]
+    return image.shape
 
   def decode_image(self, image_data):
     """Decodes the image data string.

@@ -96,8 +96,8 @@ parser.add_argument('--resnet_size', type=int, default=101,
 
 
 _NUM_CLASSES = 21
-_HEIGHT = 128
-_WIDTH = 128
+_HEIGHT = 200
+_WIDTH = 200
 _DEPTH = 3
 _MIN_SCALE = 0.5
 _MAX_SCALE = 2.0
@@ -136,7 +136,7 @@ def parse_record(raw_record):
         'height':  tf.FixedLenFeature((), tf.int64),
         'width':  tf.FixedLenFeature((), tf.int64),
         'depth':  tf.FixedLenFeature((), tf.int64),
-        'gender': tf.FixedLenFeature((), tf.float32),
+        'gender': tf.FixedLenFeature((), tf.int64),
         'age': tf.FixedLenFeature((), tf.float32),
         'path': tf.FixedLenFeature((), tf.string, default_value=''),
         'image': tf.FixedLenFeature((), tf.string, default_value=''),
@@ -144,9 +144,15 @@ def parse_record(raw_record):
 
   parsed = tf.parse_single_example(raw_record, feature)
 
-  image = tf.io.decode_raw(parsed['image'], tf.uint8)
-  image_shape = tf.stack([parsed['height'], parsed['width'], parsed['depth']])
-  image = tf.reshape(image, image_shape)
+  #image = tf.io.decode_raw(parsed['image'], tf.uint8)
+  image = tf.io.decode_jpeg(parsed['image'], _DEPTH)
+  #image_shape = tf.stack([parsed['height'], parsed['width'], _DEPTH])
+  #image = tf.reshape(image, image_shape)
+  #image.set_shape([_HEIGHT, _WIDTH, _DEPTH])
+  image = tf.image.resize_with_crop_or_pad(image, _HEIGHT, _WIDTH)
+  image = tf.cast(image,tf.float32)
+
+  
 
   label = {
     'name':parsed['subject'],
@@ -176,8 +182,8 @@ def preprocess_image(image, label, is_training):
     image.set_shape([_HEIGHT, _WIDTH, 3])
     label.set_shape([_HEIGHT, _WIDTH, 1])'''
 
-  tf.image.resize_with_crop_or_pad(image, _HEIGHT, _WIDTH)
-  image = tf.image.per_image_standardization(image)
+  #tf.image.resize_with_crop_or_pad(image, _HEIGHT, _WIDTH)
+  #image = tf.image.per_image_standardization(image)
 
   return image, label
 
