@@ -18,21 +18,21 @@ def parse_arguments():
 
     parser.add_argument('--path', 
         type=str,
-        default='C:\\data\\datasets\\imdb\\',
-        #default='/img/Datasets/imdb-wiki/',
+        #default='C:\\data\\datasets\\imdb\\',
+        default='/store/Datasets/imdb/',
         help='Path to data directory')
 
     parser.add_argument('--out', 
         type=str,
-        default='C:\\data\\datasets\\imdb\\',
-        #default='/img/Datasets/imdb-wiki/',
+        #default='C:\\data\\datasets\\imdb\\',
+        default='/store/Datasets/imdb/',
 
         help='Path to output directory')
 
     parser.add_argument('--image_wildcard', 
         type=str,
-        default='.tif',
-        help='Image file wildcard e.g.: .tif')
+        default='.jpg',
+        help='Image file wildcard e.g.: .jpg')
 
     parser.add_argument('--annotation_wildcard', 
         type=str,

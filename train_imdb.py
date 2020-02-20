@@ -8,6 +8,7 @@ import argparse
 import os
 import sys
 import shutil
+import glob
 
 import tensorflow as tf
 
@@ -55,8 +56,8 @@ parser.add_argument('--max_iter', type=int, default=30,
                     help='Number of maximum iteration used for "poly" learning rate policy.')
 
 parser.add_argument('--data_dir', type=str, 
-                    #default='/store/datasets/imdb',
-                    default='C:\\data\\datasets\\imdb',
+                    default='/store/Datasets/imdb',
+                    #default='C:\\data\\datasets\\imdb',
                     help='Path to the directory containing the imdb data tf record.')
 
 parser.add_argument('--base_architecture', type=str, default='resnet_v2_101',
@@ -65,8 +66,8 @@ parser.add_argument('--base_architecture', type=str, default='resnet_v2_101',
 
 # Pre-trained models: https://github.com/tensorflow/models/blob/master/research/slim/README.md
 parser.add_argument('--pre_trained_model', type=str, 
-                    #default='/store/training/resnet_v2_101_2017_04_14/resnet_v2_101.ckpt',
-                    default='C:\\data\\training\\resnet_v2_101_2017_04_14\\resnet_v2_101.ckpt',
+                    default='/store/training/resnet_v2_101_2017_04_14/resnet_v2_101.ckpt',
+                    #default='C:\\data\\training\\resnet_v2_101_2017_04_14\\resnet_v2_101.ckpt',
                     help='Path to the pre-trained model checkpoint.')
 
 parser.add_argument('--output_stride', type=int, default=16,
@@ -125,9 +126,9 @@ def get_filenames(is_training, data_dir):
     A list of file names.
   """
   if is_training:
-    return [os.path.join(data_dir, 'training.tfrecord')]
+    return glob.glob(os.path.join(data_dir, 'training-?????-of-?????.tfrecord'))
   else:
-    return [os.path.join(data_dir, 'validation.tfrecord')]
+    return glob.glob(os.path.join(data_dir, 'validation-?????-of-?????.tfrecord'))
 
 
 def parse_record(raw_record):
@@ -183,7 +184,7 @@ def preprocess_image(image, label, is_training):
     label.set_shape([_HEIGHT, _WIDTH, 1])'''
 
   #tf.image.resize_with_crop_or_pad(image, _HEIGHT, _WIDTH)
-  #image = tf.image.per_image_standardization(image)
+  image = tf.image.per_image_standardization(image)
 
   return image, label
 
@@ -255,7 +256,10 @@ def main(unused_argv):
           'momentum': _MOMENTUM,
           'freeze_batch_norm': FLAGS.freeze_batch_norm,
           'initial_global_step': FLAGS.initial_global_step,
-          'resnet_size': FLAGS.resnet_size
+          'resnet_size': FLAGS.resnet_size,
+          'kGender':1.0,
+          'kAge':1.0,
+          'learning_rate':1e-4
       }
 
   # Set up a RunConfig to only save checkpoints once per training cycle.
@@ -268,10 +272,10 @@ def main(unused_argv):
 
   for _ in range(FLAGS.train_epochs // FLAGS.epochs_per_eval):
     tensors_to_log = {
-      'learning_rate': 'learning_rate',
-      'cross_entropy': 'cross_entropy',
-      'train_px_accuracy': 'train_px_accuracy',
-      'train_mean_iou': 'train_mean_iou',
+      #'learning_rate': 'learning_rate',
+      #'cross_entropy': 'cross_entropy',
+      #'train_px_accuracy': 'train_px_accuracy',
+      #'train_mean_iou': 'train_mean_iou',
     }
 
     logging_hook = tf.train.LoggingTensorHook(

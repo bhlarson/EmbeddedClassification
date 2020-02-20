@@ -323,20 +323,17 @@ def resnetv2_model_fn(features, labels, mode, params):
   tf.summary.scalar('classification_cross_entropy', cross_entropy)
 
   # Regression loss
-  loss_mse = tf.losses.mean_squared_error(labels['age'], pred_age)
+  loss_mse = tf.losses.mean_squared_error(tf.expand_dims(labels['age'],1), pred_age)
 
   # Create a tensor named cross_entropy for logging purposes.
   tf.identity(loss_mse, name='regression_mse')
   tf.summary.scalar('regression_mse', loss_mse)
 
   # Add weight decay to the loss.
-  tf.math.scalar_mul(params['kGender'], cross_entropy)
-  tf.math.scalar_mul(params['kAge'], loss_mse)
-  with tf.variable_scope("total_loss"):
-    loss = tf.math.add(
-      tf.math.scalar_mul(params['kGender'], cross_entropy),
-      tf.math.scalar_mul(params['kAge'], loss_mse),
-      name=loss)
+  lGender = tf.math.scalar_mul(params['kGender'], cross_entropy)
+  lAge = tf.math.scalar_mul(params['kAge'], loss_mse)
+  #with tf.variable_scope("total_loss"):
+  loss = tf.math.add( lGender, lAge, name='loss')
 
   if mode == tf.estimator.ModeKeys.EVAL:
     # Compute evaluation metrics.

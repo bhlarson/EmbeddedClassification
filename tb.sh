@@ -1,0 +1,1 @@
+tensorboard --logdir ./model/ --port=8008
