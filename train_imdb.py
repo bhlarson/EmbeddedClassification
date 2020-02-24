@@ -1,8 +1,19 @@
 """Train a Resnet model for age classification and gender regression from the imdb dataset."""
+#from __future__ import absolute_import
+#from __future__ import division
+#from __future__ import print_function
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+if False:
+    # https://code.visualstudio.com/docs/python/debugging#_remote-debugging
+    # Launch applicaiton on remote computer: 
+    # > python3 -m ptvsd --host 10.150.41.30 --port 3000 --wait train_imdb.py
+    import ptvsd
+    # Allow other computers to attach to ptvsd at this IP address and port.
+    ptvsd.enable_attach(address=('10.150.41.30', 3000), redirect_output=True)
+    # Pause the program until a remote debugger is attached
+    print("Wait for debugger attach")
+    ptvsd.wait_for_attach()
+
 
 import argparse
 import os
@@ -30,7 +41,7 @@ parser.add_argument('--model_dir', type=str, default='./model',
 parser.add_argument('--clean_model_dir', action='store_true',
                     help='Whether to clean up the model directory if present.')
 
-parser.add_argument('--train_epochs', type=int, default=1,
+parser.add_argument('--train_epochs', type=int, default=20,
                     help='Number of training epochs: '
                          'For 30K iteration with batch size 6, train_epoch = 17.01 (= 30K * 6 / 10,582). '
                          'For 30K iteration with batch size 8, train_epoch = 22.68 (= 30K * 8 / 10,582). '
@@ -45,7 +56,7 @@ parser.add_argument('--epochs_per_eval', type=int, default=1,
 parser.add_argument('--tensorboard_images_max_outputs', type=int, default=6,
                     help='Max number of batch elements to generate for Tensorboard.')
 
-parser.add_argument('--batch_size', type=int, default=2,
+parser.add_argument('--batch_size', type=int, default=24,
                     help='Number of examples per batch.')
 
 parser.add_argument('--learning_rate_policy', type=str, default='poly',
@@ -151,9 +162,6 @@ def parse_record(raw_record):
   #image = tf.reshape(image, image_shape)
   #image.set_shape([_HEIGHT, _WIDTH, _DEPTH])
   image = tf.image.resize_with_crop_or_pad(image, _HEIGHT, _WIDTH)
-  image = tf.cast(image,tf.float32)
-
-  
 
   label = {
     'name':parsed['subject'],
@@ -184,7 +192,6 @@ def preprocess_image(image, label, is_training):
     label.set_shape([_HEIGHT, _WIDTH, 1])'''
 
   #tf.image.resize_with_crop_or_pad(image, _HEIGHT, _WIDTH)
-  image = tf.image.per_image_standardization(image)
 
   return image, label
 
@@ -210,6 +217,13 @@ def input_fn(is_training, data_dir, batch_size, num_epochs=1):
     # is a relatively small dataset, we choose to shuffle the full epoch.
     #dataset = dataset.shuffle(buffer_size=_NUM_IMAGES['train'])
 
+  if is_training:
+
+    # When choosing shuffle buffer sizes, larger sizes result in better
+    # randomness, while smaller sizes have better performance.
+    # is a relatively small dataset, we choose to shuffle the full epoch.
+    dataset = dataset.shuffle(buffer_size=500)
+
   dataset = dataset.map(parse_record)
   dataset = dataset.map(lambda image, label: preprocess_image(image, label, is_training))
   dataset = dataset.prefetch(batch_size)
@@ -227,7 +241,7 @@ def input_fn(is_training, data_dir, batch_size, num_epochs=1):
 def serving_input_fn():
     shape = [_WIDTH, _HEIGHT, _DEPTH]
     features = {
-        "image" : tf.FixedLenFeature(shape=shape, dtype=tf.uint8),
+        "image" : tf.FixedLenFeature(shape=[_WIDTH, _HEIGHT, _DEPTH], dtype=tf.uint8),
     }
     return tf.estimator.export.build_parsing_serving_input_receiver_fn(features)
 
@@ -259,7 +273,7 @@ def main(unused_argv):
           'resnet_size': FLAGS.resnet_size,
           'kGender':1.0,
           'kAge':1.0,
-          'learning_rate':1e-4
+          'learning_rate':1e-3
       }
 
   # Set up a RunConfig to only save checkpoints once per training cycle.
@@ -270,7 +284,7 @@ def main(unused_argv):
       config=run_config,
       params=params)
 
-  for _ in range(FLAGS.train_epochs // FLAGS.epochs_per_eval):
+  for step in range(FLAGS.train_epochs // FLAGS.epochs_per_eval):
     tensors_to_log = {
       #'learning_rate': 'learning_rate',
       #'cross_entropy': 'cross_entropy',
@@ -288,11 +302,11 @@ def main(unused_argv):
       train_hooks.append(debug_hook)
       eval_hooks = [debug_hook]
 
-    tf.logging.info("Start training.")
+    '''tf.logging.info("Start training.")
     model.train(
         input_fn=lambda: input_fn(True, FLAGS.data_dir, FLAGS.batch_size, FLAGS.epochs_per_eval),
-        hooks=train_hooks
-        # steps=1  # For debug
+        hooks=train_hooks,
+        steps=100  # For debug
     )
 
     tf.logging.info("Start evaluation.")
@@ -301,12 +315,27 @@ def main(unused_argv):
         # Batch size must be 1 for testing because the images' size differs
         input_fn=lambda: input_fn(False, FLAGS.data_dir, 1),
         hooks=eval_hooks,
-        # steps=1  # For debug
+        steps=1  # For debug
     )
-    print(eval_results)
+    print(eval_results)'''
 
-    model.export_saved_model('saved_model', serving_input_fn)
+    train_spec = tf.estimator.TrainSpec(input_fn=lambda: input_fn(True, FLAGS.data_dir, FLAGS.batch_size, FLAGS.epochs_per_eval) , max_steps=30000000)
+    #train_spec = tf.estimator.TrainSpec(input_fn=lambda: input_fn(True, FLAGS.data_dir, FLAGS.batch_size, FLAGS.epochs_per_eval))
+    eval_spec = tf.estimator.EvalSpec(input_fn=lambda: input_fn(False, FLAGS.data_dir, 1))
 
+    tf.estimator.train_and_evaluate(model, train_spec, eval_spec)
+
+    #serving_input_fn = tf.estimator.export.build_parsing_serving_input_receiver_fn(
+    #    tf.feature_column.make_parse_example_spec([tf.FixedLenFeature(shape=[_WIDTH, _HEIGHT, _DEPTH], dtype=tf.uint8)]))
+    #model.export_saved_model('saved_model', serving_input_fn)
+
+  features = {
+      "features" : tf.FixedLenFeature(shape=[_WIDTH, _HEIGHT, _DEPTH], dtype=tf.string),
+  }
+  serving_input_fn = tf.estimator.export.build_parsing_serving_input_receiver_fn(features)    
+  model.export_saved_model('saved_model', serving_input_fn)
+
+print('complete')
 
 if __name__ == '__main__':
   tf.logging.set_verbosity(tf.logging.INFO)

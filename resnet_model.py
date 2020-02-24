@@ -277,11 +277,13 @@ def resnet_v2( resnet_size, data_format=None):
 
 
 def resnetv2_model_fn(features, labels, mode, params):
-  """Model function for PASCAL VOC."""
-  if isinstance(features, dict):
-    features = features['feature']
+  if isinstance(features, dict):  # export_saved_models
+    features = features['features']
 
   network = resnet_v2(params['resnet_size'])
+
+  features = tf.cast(features,tf.float32)
+  features = tf.image.per_image_standardization(features)
 
   final = network(inputs=features, is_training= (mode==tf.estimator.ModeKeys.TRAIN) )
 
@@ -309,6 +311,10 @@ def resnetv2_model_fn(features, labels, mode, params):
 
   # Prepare data for both train and eval modes
   #gender_confusion_matrix = tf.confusion_matrix(labels['gender'], pred_gender, num_classes=num_classes_gender)
+
+  sum_image = tf.summary.image("image", features, max_outputs=6)
+  #tf.summary.scalar('pred_age', pred_age)
+  #tf.summary.scalar('age', labels['age'])
 
   predictions['label_gender'] = labels['gender']
   predictions['label_age'] = labels['age']

@@ -47,7 +47,7 @@ def parse_arguments():
     
     parser.add_argument('--shards', 
         type=int,
-        default= 5,
+        default= 1,
         help='Number of tfrecord shards')
 
     parser.add_argument('--sets', type=json.loads,
