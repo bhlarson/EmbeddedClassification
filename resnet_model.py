@@ -281,7 +281,7 @@ def resnetv2_model_fn(features, labels, mode, params):
   if isinstance(features, dict):
     features = features['feature']
 
-  network = resnet_v2(params['resnet_size'])
+  network = resnet_v2(params['resnet_size'], params['data_format'])
 
   final = network(inputs=features, is_training= (mode==tf.estimator.ModeKeys.TRAIN) )
 
@@ -334,18 +334,18 @@ def resnetv2_model_fn(features, labels, mode, params):
   lAge = tf.math.scalar_mul(params['kAge'], loss_mse)
   #with tf.variable_scope("total_loss"):
   loss = tf.math.add( lGender, lAge, name='loss')
-
+  predictions['loss'] = loss
   if mode == tf.estimator.ModeKeys.EVAL:
     # Compute evaluation metrics.
     #metrics = {'accuracy': accuracy}
     metrics = {}
-    return tf.estimator.EstimatorSpec(mode, loss=loss, eval_metric_ops=metrics)
+    return tf.estimator.EstimatorSpec(mode, loss=loss, eval_metric_ops=metrics, predictions=predictions)
 
   if mode == tf.estimator.ModeKeys.TRAIN:
     optimizer = tf.train.AdamOptimizer(params['learning_rate'])
     train_op = optimizer.minimize(loss, global_step=tf.train.get_global_step())
 
-    return tf.estimator.EstimatorSpec(mode, loss=loss, train_op=train_op)
+    return tf.estimator.EstimatorSpec(mode, loss=loss, train_op=train_op, predictions=predictions)
 
 '''
   if mode == tf.estimator.ModeKeys.TRAIN:
