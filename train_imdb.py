@@ -273,7 +273,8 @@ def main(unused_argv):
           'resnet_size': FLAGS.resnet_size,
           'kGender':1.0,
           'kAge':1.0,
-          'learning_rate':1e-3
+          'learning_rate':1e-3,
+          'data_format':None,
       }
 
   # Set up a RunConfig to only save checkpoints once per training cycle.
