@@ -19,6 +19,7 @@ import shutil
 import glob
 
 import tensorflow as tf
+from matplotlib import pyplot as plt
 
 import resnet_model
 from utils import preprocessing
@@ -38,7 +39,7 @@ parser.add_argument('--model_dir', type=str, default='./model',
 parser.add_argument('--clean_model_dir', action='store_true',
                     help='Whether to clean up the model directory if present.')
 
-parser.add_argument('--train_epochs', type=int, default=5,
+parser.add_argument('--train_epochs', type=int, default=1,
                     help='Number of training epochs: '
                          'For 30K iteration with batch size 6, train_epoch = 17.01 (= 30K * 6 / 10,582). '
                          'For 30K iteration with batch size 8, train_epoch = 22.68 (= 30K * 8 / 10,582). '
@@ -304,7 +305,11 @@ def main(unused_argv):
     print("Start evaluation.")
     # Evaluate the model and print results
     predictions = model.predict(input_fn=lambda: input_fn(False, FLAGS.data_dir, 1))
-    print(predictions)
+    for i, prediction in enumerate(predictions):
+      print('{}: pred_age {}, pred_gender {}, '.format(i, prediction['pred_age'],prediction['pred_gender']))
+      plt.imshow(prediction['image'])
+      plt.show()
+
 
     #eval_results = model.evaluate(
     #    input_fn=lambda: input_fn(False, FLAGS.data_dir, 1),

@@ -280,12 +280,12 @@ def resnetv2_model_fn(features, labels, mode, params):
   if isinstance(features, dict):  # export_saved_models
     features = features['features']
 
-  network = resnet_v2(params['resnet_size'], params['data_format'])
+  network = resnet_v2(params['resnet_size'])
 
-  features = tf.cast(features,tf.float32)
-  features = tf.image.per_image_standardization(features)
+  images = tf.cast(features,tf.float32)
+  images = tf.image.per_image_standardization(images)
 
-  final = network(inputs=features, is_training= (mode==tf.estimator.ModeKeys.TRAIN) )
+  final = network(inputs=images, is_training= (mode==tf.estimator.ModeKeys.TRAIN) )
 
   # Male/female classification
   num_classes_gender = 2
@@ -302,6 +302,7 @@ def resnetv2_model_fn(features, labels, mode, params):
       'pred_age': pred_age,
       'pred_gender': pred_gender,
       'logits_gender': logits_gender,
+      'image':features,
   }
 
   if mode == tf.estimator.ModeKeys.PREDICT:
@@ -311,10 +312,13 @@ def resnetv2_model_fn(features, labels, mode, params):
 
   # Prepare data for both train and eval modes
   #gender_confusion_matrix = tf.confusion_matrix(labels['gender'], pred_gender, num_classes=num_classes_gender)
+  #tf.summary.scalar('label_age', labels['age'])
+  #tf.summary.scalar('pred_age', tf.squeeze(pred_age, axis=1))
+
+  #tf.summary.scalar('label_gender', labels['gender'])
+  #tf.summary.scalar('pred_gender', pred_gender)
 
   sum_image = tf.summary.image("image", features, max_outputs=6)
-  #tf.summary.scalar('pred_age', pred_age)
-  #tf.summary.scalar('age', labels['age'])
 
   predictions['label_gender'] = labels['gender']
   predictions['label_age'] = labels['age']
