@@ -351,7 +351,7 @@ def resnetv2_model_fn(features, labels, mode, params):
     optimizer = tf.train.AdamOptimizer(params['learning_rate'])
     train_op = optimizer.minimize(loss, global_step=tf.train.get_global_step())
 
-    return tf.estimator.EstimatorSpec(mode, loss=loss, train_op=train_op, predictions=predictions)
+    return tf.estimator.EstimatorSpec(mode, loss=loss, train_op=train_op)
 
 '''
   if mode == tf.estimator.ModeKeys.TRAIN:

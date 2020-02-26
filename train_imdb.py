@@ -241,7 +241,7 @@ def input_fn(is_training, data_dir, batch_size, num_epochs=1):
 def serving_input_fn():
     shape = [_WIDTH, _HEIGHT, _DEPTH]
     features = {
-        "image" : tf.FixedLenFeature(shape=[_WIDTH, _HEIGHT, _DEPTH], dtype=tf.uint8),
+        "features" : tf.FixedLenFeature(shape=shape, dtype=tf.string),
     }
     return tf.estimator.export.build_parsing_serving_input_receiver_fn(features)
 
@@ -303,14 +303,14 @@ def main(unused_argv):
       train_hooks.append(debug_hook)
       eval_hooks = [debug_hook]
 
-    '''tf.logging.info("Start training.")
+    '''print("Start training.")
     model.train(
         input_fn=lambda: input_fn(True, FLAGS.data_dir, FLAGS.batch_size, FLAGS.epochs_per_eval),
         hooks=train_hooks,
         steps=100  # For debug
     )
 
-    tf.logging.info("Start evaluation.")
+    print("Start evaluation.")
     # Evaluate the model and print results
     eval_results = model.evaluate(
         # Batch size must be 1 for testing because the images' size differs
@@ -330,15 +330,10 @@ def main(unused_argv):
     #    tf.feature_column.make_parse_example_spec([tf.FixedLenFeature(shape=[_WIDTH, _HEIGHT, _DEPTH], dtype=tf.uint8)]))
     #model.export_saved_model('saved_model', serving_input_fn)
 
-  features = {
-      "features" : tf.FixedLenFeature(shape=[_WIDTH, _HEIGHT, _DEPTH], dtype=tf.string),
-  }
-  serving_input_fn = tf.estimator.export.build_parsing_serving_input_receiver_fn(features)    
-  model.export_saved_model('saved_model', serving_input_fn)
+  model.export_saved_model('saved_model', serving_input_fn())
 
 print('complete')
 
 if __name__ == '__main__':
-  tf.logging.set_verbosity(tf.logging.INFO)
   FLAGS, unparsed = parser.parse_known_args()
   tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)

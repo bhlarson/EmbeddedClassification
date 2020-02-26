@@ -1,8 +1,16 @@
 """Train a Resnet model for age classification and gender regression from the imdb dataset."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+if False:
+    # https://code.visualstudio.com/docs/python/debugging#_remote-debugging
+    # Launch applicaiton on remote computer: 
+    # > python3 -m ptvsd --host 10.150.41.30 --port 3000 --wait train_imdb.py
+    import ptvsd
+    # Allow other computers to attach to ptvsd at this IP address and port.
+    ptvsd.enable_attach(address=('10.150.41.30', 3000), redirect_output=True)
+    # Pause the program until a remote debugger is attached
+    print("Wait for debugger attach")
+    ptvsd.wait_for_attach()
+
 
 import argparse
 import os
@@ -30,7 +38,7 @@ parser.add_argument('--model_dir', type=str, default='./model',
 parser.add_argument('--clean_model_dir', action='store_true',
                     help='Whether to clean up the model directory if present.')
 
-parser.add_argument('--train_epochs', type=int, default=1,
+parser.add_argument('--train_epochs', type=int, default=5,
                     help='Number of training epochs: '
                          'For 30K iteration with batch size 6, train_epoch = 17.01 (= 30K * 6 / 10,582). '
                          'For 30K iteration with batch size 8, train_epoch = 22.68 (= 30K * 8 / 10,582). '
@@ -152,7 +160,6 @@ def parse_record(raw_record):
   #image.set_shape([_HEIGHT, _WIDTH, _DEPTH])
   image = tf.image.resize_with_crop_or_pad(image, _HEIGHT, _WIDTH)
  
-
   label = {
     'name':parsed['subject'],
     'gender':parsed['gender'],
@@ -182,7 +189,6 @@ def preprocess_image(image, label, is_training):
     label.set_shape([_HEIGHT, _WIDTH, 1])'''
 
   #tf.image.resize_with_crop_or_pad(image, _HEIGHT, _WIDTH)
-  image = tf.image.per_image_standardization(image)
 
   return image, label
 
@@ -207,6 +213,13 @@ def input_fn(is_training, data_dir, batch_size, num_epochs=1):
     # randomness, while smaller sizes have better performance.
     # is a relatively small dataset, we choose to shuffle the full epoch.
     #dataset = dataset.shuffle(buffer_size=_NUM_IMAGES['train'])
+
+  if is_training:
+
+    # When choosing shuffle buffer sizes, larger sizes result in better
+    # randomness, while smaller sizes have better performance.
+    # is a relatively small dataset, we choose to shuffle the full epoch.
+    dataset = dataset.shuffle(buffer_size=500)
 
   dataset = dataset.map(parse_record)
   dataset = dataset.map(lambda image, label: preprocess_image(image, label, is_training))
@@ -257,8 +270,9 @@ def main(unused_argv):
           'resnet_size': FLAGS.resnet_size,
           'kGender':1.0,
           'kAge':1.0,
-          'learning_rate':1e-4,
-          'data_format':'channels_last'
+          'learning_rate':1e-3,
+          'data_format':None,
+          #'data_format':'channels_last',
       }
 
   # Set up a RunConfig to only save checkpoints once per training cycle.
@@ -269,7 +283,7 @@ def main(unused_argv):
       config=run_config,
       params=params)
 
-  for _ in range(FLAGS.train_epochs // FLAGS.epochs_per_eval):
+  for step in range(FLAGS.train_epochs // FLAGS.epochs_per_eval):
     tensors_to_log = {
       #'learning_rate': 'learning_rate',
       #'cross_entropy': 'cross_entropy',
@@ -277,26 +291,28 @@ def main(unused_argv):
       #'train_mean_iou': 'train_mean_iou',
     }
 
-    logging_hook = tf.train.LoggingTensorHook(
-        tensors=tensors_to_log, every_n_iter=10)
-    train_hooks = [logging_hook]
-    eval_hooks = [logging_hook]
+    #logging_hook = tf.train.LoggingTensorHook(
+    #    tensors=tensors_to_log, every_n_iter=10)
+    #train_hooks = [logging_hook]
+    #eval_hooks = None
 
     #if FLAGS.debug:
     #  debug_hook = tf_debug.LocalCLIDebugHook()
     #  train_hooks.append(debug_hook)
     #  eval_hooks = [debug_hook]
 
-    tf.logging.info("Start evaluation.")
+    print("Start evaluation.")
     # Evaluate the model and print results
-    eval_results = model.evaluate(
-        input_fn=lambda: input_fn(False, FLAGS.data_dir, 1),
-        steps=1  # For debug
-    )
-    print(eval_results)
+    predictions = model.predict(input_fn=lambda: input_fn(False, FLAGS.data_dir, 1))
+    print(predictions)
+
+    #eval_results = model.evaluate(
+    #    input_fn=lambda: input_fn(False, FLAGS.data_dir, 1),
+    #    steps=1  # For debug
+    #)
+    #print(eval_results)
 
 
 if __name__ == '__main__':
-  tf.logging.set_verbosity(tf.logging.INFO)
   FLAGS, unparsed = parser.parse_known_args()
   tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)
