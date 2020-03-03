@@ -4,6 +4,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import sys
 import tensorflow as tf
 
 #from tensorflow.contrib.slim.nets import resnet_v2
@@ -344,12 +345,27 @@ def resnetv2_model_fn(features, labels, mode, params):
   lAge = tf.math.scalar_mul(params['kAge'], loss_mse)
   #with tf.variable_scope("total_loss"):
   loss = tf.math.add( lGender, lAge, name='loss')
-  predictions['loss'] = loss
+
+  loss = tf.Print(loss,[loss,labels['gender'],labels['age'],labels['name'], pred_age,pred_gender], 'resnetv2')
+
   if mode == tf.estimator.ModeKeys.EVAL:
     # Compute evaluation metrics.
-    #metrics = {'accuracy': accuracy}
-    metrics = {}
-    return tf.estimator.EstimatorSpec(mode, loss=loss, eval_metric_ops=metrics, predictions=predictions)
+    age_mean = tf.metrics.mean(labels['age'])
+    gender_mean = tf.metrics.mean(labels['gender'])
+    age_pred_mean = tf.metrics.mean(pred_age)
+    gender_pred_mean = tf.metrics.mean(pred_gender)
+    accuracy_gender = tf.metrics.accuracy(
+        labels['gender'], pred_gender)
+    mean_squared_error_age = tf.metrics.mean_squared_error(labels['age'], pred_age )
+    metrics = {'age_mean':age_mean,
+               'age_pred_mean':age_pred_mean, 
+               'gender_mean':gender_mean, 
+               'gender_pred_mean':gender_pred_mean, 
+               'mean_squared_error_age': mean_squared_error_age, 
+               'accuracy_gender': accuracy_gender,
+              }
+
+    return tf.estimator.EstimatorSpec(mode, predictions=predictions, loss=loss, eval_metric_ops=metrics)
 
   if mode == tf.estimator.ModeKeys.TRAIN:
     optimizer = tf.train.AdamOptimizer(params['learning_rate'])

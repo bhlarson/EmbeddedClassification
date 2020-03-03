@@ -244,8 +244,7 @@ def serving_input_fn():
     return tf.estimator.export.build_parsing_serving_input_receiver_fn(features)
 
 def main(unused_argv):
-  # Using the Winograd non-fused algorithms provides a small performance boost.
-  os.environ['TF_ENABLE_WINOGRAD_NONFUSED'] = '1'
+
 
   if FLAGS.clean_model_dir:
     shutil.rmtree(FLAGS.model_dir, ignore_errors=True)
@@ -304,19 +303,20 @@ def main(unused_argv):
 
     print("Start evaluation.")
     # Evaluate the model and print results
-    predictions = model.predict(input_fn=lambda: input_fn(False, FLAGS.data_dir, 1))
-    for i, prediction in enumerate(predictions):
-      print('{}: pred_age {}, pred_gender {}, '.format(i, prediction['pred_age'],prediction['pred_gender']))
-      plt.imshow(prediction['image'])
-      plt.show()
+    #predictions = model.predict(input_fn=lambda: input_fn(False, FLAGS.data_dir, 1))
+    #for i, prediction in enumerate(predictions):
+    #  print('{}: pred_age {}, pred_gender {}, '.format(i, prediction['pred_age'],prediction['pred_gender']))
+    #  plt.imshow(prediction['image'])
+    #  plt.show()
 
 
-    #eval_results = model.evaluate(
-    #    input_fn=lambda: input_fn(False, FLAGS.data_dir, 1),
-    #    steps=1  # For debug
-    #)
-    #print(eval_results)
-
+    eval_results = model.evaluate(
+        input_fn=lambda: input_fn(True, FLAGS.data_dir, 1),
+        #steps=10  # For debug
+    )
+    print(eval_results)
+    #  plt.imshow(prediction['image'])
+    #  plt.show()
 
 if __name__ == '__main__':
   FLAGS, unparsed = parser.parse_known_args()

@@ -246,8 +246,7 @@ def serving_input_fn():
     return tf.estimator.export.build_parsing_serving_input_receiver_fn(features)
 
 def main(unused_argv):
-  # Using the Winograd non-fused algorithms provides a small performance boost.
-  os.environ['TF_ENABLE_WINOGRAD_NONFUSED'] = '1'
+  tf.compat.v1.enable_eager_execution
 
   if FLAGS.clean_model_dir:
     shutil.rmtree(FLAGS.model_dir, ignore_errors=True)
@@ -271,7 +270,7 @@ def main(unused_argv):
           'freeze_batch_norm': FLAGS.freeze_batch_norm,
           'initial_global_step': FLAGS.initial_global_step,
           'resnet_size': FLAGS.resnet_size,
-          'kGender':1.0,
+          'kGender':50.0,
           'kAge':1.0,
           'learning_rate':1e-3,
           'data_format':None,

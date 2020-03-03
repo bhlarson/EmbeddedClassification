@@ -1,3 +1,14 @@
+if False:
+    # https://code.visualstudio.com/docs/python/debugging#_remote-debugging
+    # Launch applicaiton on remote computer: 
+    # > python3 -m ptvsd --host 10.150.41.30 --port 3000 --wait makerecord.py
+    import ptvsd
+    # Allow other computers to attach to ptvsd at this IP address and port.
+    ptvsd.enable_attach(address=('10.150.41.30', 3000), redirect_output=True)
+    # Pause the program until a remote debugger is attached
+    print("Wait for debugger attach")
+    ptvsd.wait_for_attach()
+
 import os
 import sys
 import argparse
@@ -5,6 +16,8 @@ import json
 import build_data
 import random
 import math
+import datetime
+import scipy.io as sio
 
 import tensorflow as tf
 import cv2
@@ -138,13 +151,10 @@ def _str_feature(value):
 
 def Example(args, i, imbddata, image_reader):
 
-    imgpath = '{}imdb_crop/{}'.format(args.path,imbddata['full_path'][i])
+    imgpath = '{}imdb_crop/{}'.format(args.path,imbddata['full_path'])
     image_data = tf.io.gfile.GFile(imgpath, 'rb').read()
     y,x,c = image_reader.read_image_dims(image_data)
-    if(math.isnan(imbddata['gender'][i])):
-        isMale = 1
-    else:
-        isMale = int(imbddata['gender'][i])
+    isMale = int(imbddata['gender'])
     
     scale = args.size/max(y,x)
     #xOffset = int((args.size-scale*x)/2)
@@ -157,22 +167,22 @@ def Example(args, i, imbddata, image_reader):
         fig = plt.figure()
         a = fig.add_subplot(1, 2, 1)
         plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-        a.set_title(imbddata['name'][i])
+        a.set_title(imbddata['name'])
 
         a = fig.add_subplot(1, 2, 2)
         plt.imshow(cv2.cvtColor(dst, cv2.COLOR_BGR2RGB))
-        a.set_title('age:{}, gender:{}'.format(imbddata['age'][i],imbddata['gender'][i]))
+        a.set_title('age:{}, gender:{}'.format(imbddata['age'],imbddata['gender']))
 
         plt.show()
 
     feature = {
-        'subject':  _str_feature(imbddata['name'][i]),
+        'subject':  _str_feature(imbddata['name']),
         'height':  tf.train.Feature(int64_list=tf.train.Int64List(value=[y])),
         'width':  tf.train.Feature(int64_list=tf.train.Int64List(value=[x])),
         'depth':  tf.train.Feature(int64_list=tf.train.Int64List(value=[c])),
         'gender': tf.train.Feature(int64_list=tf.train.Int64List(value=[isMale])),
-        'age': tf.train.Feature(float_list=tf.train.FloatList(value=[imbddata['age'][i]])),
-        'path': _str_feature(imbddata['full_path'][i]),
+        'age': tf.train.Feature(float_list=tf.train.FloatList(value=[imbddata['age']])),
+        'path': _str_feature(imbddata['full_path']),
         'image': _bytes_feature(image_data)
     }
 
@@ -187,21 +197,13 @@ def WriteRecords(args, datasets, imbddata):
     '''
 
     # shuffle records between datasets and shards
-
-    shuffle(args.seed, imbddata['age'], 
-        imbddata['dob'], 
-        imbddata['face_location'], 
-        imbddata['face_score'], 
-        imbddata['full_path'], 
-        imbddata['gender'], 
-        imbddata['name'], 
-        imbddata['photo_taken'], 
-        imbddata['second_face_score'])
+    random.shuffle(imbddata)
+    
 
     image_reader = build_data.ImageReader('jpeg', channels=3)
 
     start = 0
-    numEntries = len(imbddata['dob'])
+    numEntries = len(imbddata)
     for ids, dataset in enumerate(datasets):
         for shard_id in range(args.shards):
             output_filename = os.path.join(args.out, '%s-%05d-of-%05d.tfrecord' % (dataset['name'], shard_id, args.shards))
@@ -215,23 +217,70 @@ def WriteRecords(args, datasets, imbddata):
             pb = ProgressBar(total=stop-start,prefix='{}'.format(dataset['name']), suffix='of {}'.format(stop-start), decimals=3, length=75, fill='%', zfill='-')
             with tf.io.TFRecordWriter(output_filename) as tfrecord_writer:
                 for i in range(start,stop):
-                    if(imbddata['face_score'][i]>= 1.0 and imbddata['age'][i] and imbddata['gender'][i]):
-                        example = Example(args, i,imbddata,image_reader)
-                        tfrecord_writer.write(example.SerializeToString())
-                        if i%100 == 0:
-                            pb.print_progress_bar(i-start)
+                    example = Example(args, i,imbddata[i],image_reader)
+                    tfrecord_writer.write(example.SerializeToString())
+                    if i%100 == 0:
+                        pb.print_progress_bar(i-start)
             pb.print_progress_bar(stop-start)
             start = stop
 
             sys.stdout.write('\n')
             sys.stdout.flush()
 
+def matlab2datetime(matlab_datenum):
+    try:
+        ordinal = datetime.date.fromordinal(int(matlab_datenum))
+        matlabDelta = datetime.timedelta(days = 366)
+        fraction = datetime.timedelta(days=int(matlab_datenum)%1)
+        python_datetime = ordinal - matlabDelta + fraction
+    except:
+        python_datetime = None
 
+    #ordinal = int(matlab_datenum) - 366
+    #if(ordinal > 1):
+    #    ordinal
+    #    python_datetime = datetime.date.fromordinal(ordinal) + datetime.timedelta(days=matlab_datenum%1)
+    #    python_datetime = datetime.fromordinal(int(matlab_datenum)) + datetime.timedelta(days=matlab_datenum%1) - datetime.timedelta(days = 366)
+    #else:
+    #    python_datetime = None
+
+    return python_datetime
+
+def LoadMatToDict(args, face_score_threshold = 1.0):
+    mat_contents = sio.loadmat(args.path+'imdb.mat')
+    
+    imbddata = []
+    numEntries = len(mat_contents['imdb']['dob'][0][0][0])
+
+    for i in range(numEntries):
+        entry = {'dob':mat_contents['imdb']['dob'][0][0][0][i],
+                 'photo_taken':mat_contents['imdb']['photo_taken'][0][0][0][i],
+                 'full_path':np.array2string(mat_contents['imdb']['full_path'][0][0][0][i][0]).replace('\'',''),
+                 'gender':mat_contents['imdb']['gender'][0][0][0][i],
+                 'name':mat_contents['imdb']['name'][0][0][0][i][0],
+                 'face_location':mat_contents['imdb']['face_location'][0][0][0][i][0].tolist(),
+                 'face_score':mat_contents['imdb']['face_score'][0][0][0][i],
+                 'second_face_score':mat_contents['imdb']['second_face_score'][0][0][0][i],
+                 }
+
+        dob = matlab2datetime(entry['dob'])
+        photo = datetime.datetime(entry['photo_taken'],7,1).date()
+        if dob is not None:
+            entry['age'] = (photo-dob).days/365.25
+        else:
+            entry['age'] = None
+
+        if entry['face_score'] >= face_score_threshold and not math.isnan(entry['gender']) and entry['age'] is not None:
+            imbddata.append(entry)
+    return imbddata
 
 def main(args):
-    imbddata = {}
-    with open(args.path + "imbddata.json") as json_file:
-        imbddata = json.load(json_file)
+
+    imbddata = LoadMatToDict(args)
+
+    #with open(args.path + "imbddata.json") as json_file:
+    #    imbddata = json.load(json_file)
+    
     WriteRecords(args, args.sets, imbddata)
    
     print('exit')
