@@ -286,7 +286,8 @@ def resnetv2_model_fn(features, labels, mode, params):
   images = tf.cast(features,tf.float32)
   images = tf.image.per_image_standardization(images)
 
-  final = network(inputs=images, is_training= (mode==tf.estimator.ModeKeys.TRAIN) )
+  #final = network(inputs=images, is_training= (mode==tf.estimator.ModeKeys.TRAIN) )
+  final = network(inputs=images, is_training= True )
 
   # Male/female classification
   num_classes_gender = 2
@@ -346,32 +347,38 @@ def resnetv2_model_fn(features, labels, mode, params):
   #with tf.variable_scope("total_loss"):
   loss = tf.math.add( lGender, lAge, name='loss')
 
-  loss = tf.Print(loss,[loss,labels['gender'],labels['age'],labels['name'], pred_age,pred_gender], 'resnetv2')
+  loss = tf.Print(loss,[loss,labels['gender'],pred_gender,labels['age'], pred_age,labels['name']], 'resnetv2')
 
-  if mode == tf.estimator.ModeKeys.EVAL:
-    # Compute evaluation metrics.
-    age_mean = tf.metrics.mean(labels['age'])
-    gender_mean = tf.metrics.mean(labels['gender'])
-    age_pred_mean = tf.metrics.mean(pred_age)
-    gender_pred_mean = tf.metrics.mean(pred_gender)
-    accuracy_gender = tf.metrics.accuracy(
-        labels['gender'], pred_gender)
-    mean_squared_error_age = tf.metrics.mean_squared_error(labels['age'], pred_age )
-    metrics = {'age_mean':age_mean,
+  #if mode == tf.estimator.ModeKeys.EVAL:
+  # Compute evaluation metrics.
+  loss_mean = tf.metrics.mean(loss)
+  age_mean = tf.metrics.mean(labels['age'])
+  gender_mean = tf.metrics.mean(labels['gender'])
+
+  age_pred_mean = tf.metrics.mean(pred_age)
+  gender_pred_mean = tf.metrics.mean(pred_gender)
+
+  mean_squared_error_age = tf.metrics.mean_squared_error(labels['age'], pred_age )
+  accuracy_gender = tf.metrics.accuracy( labels['gender'], pred_gender)
+  mean_iou = tf.metrics.mean_iou(labels['gender'], pred_gender, params['num_classes'])
+
+  metrics = {'loss_mean':loss_mean,
+               'age_mean':age_mean,
                'age_pred_mean':age_pred_mean, 
                'gender_mean':gender_mean, 
                'gender_pred_mean':gender_pred_mean, 
                'mean_squared_error_age': mean_squared_error_age, 
                'accuracy_gender': accuracy_gender,
+               'mean_iou_gender': mean_iou,
               }
 
-    return tf.estimator.EstimatorSpec(mode, predictions=predictions, loss=loss, eval_metric_ops=metrics)
+  #  return tf.estimator.EstimatorSpec(mode, predictions=predictions, loss=loss, eval_metric_ops=metrics)
 
-  if mode == tf.estimator.ModeKeys.TRAIN:
-    optimizer = tf.train.AdamOptimizer(params['learning_rate'])
-    train_op = optimizer.minimize(loss, global_step=tf.train.get_global_step())
+  #if mode == tf.estimator.ModeKeys.TRAIN:
+  optimizer = tf.train.AdamOptimizer(params['learning_rate'])
+  train_op = optimizer.minimize(loss, global_step=tf.train.get_global_step())
 
-    return tf.estimator.EstimatorSpec(mode, loss=loss, train_op=train_op)
+  return tf.estimator.EstimatorSpec(mode, predictions=predictions, loss=loss, train_op=train_op, eval_metric_ops=metrics)
 
 '''
   if mode == tf.estimator.ModeKeys.TRAIN:

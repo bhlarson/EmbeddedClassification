@@ -1,4 +1,7 @@
 """Train a Resnet model for age classification and gender regression from the imdb dataset."""
+#from __future__ import absolute_import
+#from __future__ import division
+#from __future__ import print_function
 
 if False:
     # https://code.visualstudio.com/docs/python/debugging#_remote-debugging
@@ -19,7 +22,6 @@ import shutil
 import glob
 
 import tensorflow as tf
-from matplotlib import pyplot as plt
 
 import resnet_model
 from utils import preprocessing
@@ -39,7 +41,7 @@ parser.add_argument('--model_dir', type=str, default='./model',
 parser.add_argument('--clean_model_dir', action='store_true',
                     help='Whether to clean up the model directory if present.')
 
-parser.add_argument('--train_epochs', type=int, default=1,
+parser.add_argument('--train_epochs', type=int, default=20,
                     help='Number of training epochs: '
                          'For 30K iteration with batch size 6, train_epoch = 17.01 (= 30K * 6 / 10,582). '
                          'For 30K iteration with batch size 8, train_epoch = 22.68 (= 30K * 8 / 10,582). '
@@ -54,7 +56,7 @@ parser.add_argument('--epochs_per_eval', type=int, default=1,
 parser.add_argument('--tensorboard_images_max_outputs', type=int, default=6,
                     help='Max number of batch elements to generate for Tensorboard.')
 
-parser.add_argument('--batch_size', type=int, default=1,
+parser.add_argument('--batch_size', type=int, default=3,
                     help='Number of examples per batch.')
 
 parser.add_argument('--learning_rate_policy', type=str, default='poly',
@@ -160,7 +162,7 @@ def parse_record(raw_record):
   #image = tf.reshape(image, image_shape)
   #image.set_shape([_HEIGHT, _WIDTH, _DEPTH])
   image = tf.image.resize_with_crop_or_pad(image, _HEIGHT, _WIDTH)
- 
+
   label = {
     'name':parsed['subject'],
     'gender':parsed['gender'],
@@ -231,22 +233,20 @@ def input_fn(is_training, data_dir, batch_size, num_epochs=1):
   dataset = dataset.repeat(num_epochs)
   dataset = dataset.batch(batch_size)
 
-  return dataset
+  iterator = dataset.make_one_shot_iterator()
+  images, labels = iterator.get_next()
 
-  #iterator = dataset.make_one_shot_iterator()
-  #images, labels = iterator.get_next()
-
-  #return images, labels
+  return images, labels
 
 def serving_input_fn():
     shape = [_WIDTH, _HEIGHT, _DEPTH]
     features = {
-        "image" : tf.FixedLenFeature(shape=shape, dtype=tf.uint8),
+        "features" : tf.FixedLenFeature(shape=shape, dtype=tf.string),
     }
     return tf.estimator.export.build_parsing_serving_input_receiver_fn(features)
 
 def main(unused_argv):
-  tf.compat.v1.enable_eager_execution
+  #tf.compat.v1.enable_eager_execution
 
   if FLAGS.clean_model_dir:
     shutil.rmtree(FLAGS.model_dir, ignore_errors=True)
@@ -270,11 +270,10 @@ def main(unused_argv):
           'freeze_batch_norm': FLAGS.freeze_batch_norm,
           'initial_global_step': FLAGS.initial_global_step,
           'resnet_size': FLAGS.resnet_size,
-          'kGender':1.0,
+          'kGender':50.0,
           'kAge':1.0,
           'learning_rate':1e-3,
           'data_format':None,
-          #'data_format':'channels_last',
       }
 
   # Set up a RunConfig to only save checkpoints once per training cycle.
@@ -293,32 +292,54 @@ def main(unused_argv):
       #'train_mean_iou': 'train_mean_iou',
     }
 
-    #logging_hook = tf.train.LoggingTensorHook(
-    #    tensors=tensors_to_log, every_n_iter=10)
-    #train_hooks = [logging_hook]
-    #eval_hooks = None
+    logging_hook = tf.train.LoggingTensorHook(
+        tensors=tensors_to_log, every_n_iter=10)
+    train_hooks = [logging_hook]
+    eval_hooks = None
 
-    #if FLAGS.debug:
-    #  debug_hook = tf_debug.LocalCLIDebugHook()
-    #  train_hooks.append(debug_hook)
-    #  eval_hooks = [debug_hook]
+    if FLAGS.debug:
+      debug_hook = tf_debug.LocalCLIDebugHook()
+      train_hooks.append(debug_hook)
+      eval_hooks = [debug_hook]
+
+    '''print("Start training.")
+    model.train(
+        input_fn=lambda: input_fn(True, FLAGS.data_dir, FLAGS.batch_size, FLAGS.epochs_per_eval),
+        hooks=train_hooks,
+        steps=100  # For debug
+    )
 
     print("Start evaluation.")
     # Evaluate the model and print results
-    predictions = model.predict(input_fn=lambda: input_fn(False, FLAGS.data_dir, 1))
-    for i, prediction in enumerate(predictions):
-      print('{}: pred_age {}, pred_gender {}, '.format(i, prediction['pred_age'],prediction['pred_gender']))
-      plt.imshow(prediction['image'])
-      plt.show()
+    eval_results = model.evaluate(
+        # Batch size must be 1 for testing because the images' size differs
+        input_fn=lambda: input_fn(False, FLAGS.data_dir, 1),
+        hooks=eval_hooks,
+        steps=1  # For debug
+    )
+    print(eval_results)'''
 
+    #train_spec = tf.estimator.TrainSpec(input_fn=lambda: input_fn(True, FLAGS.data_dir, FLAGS.batch_size, FLAGS.epochs_per_eval) , max_steps=30000000)
+    #train_spec = tf.estimator.TrainSpec(input_fn=lambda: input_fn(True, FLAGS.data_dir, FLAGS.batch_size, FLAGS.epochs_per_eval))
+    #eval_spec = tf.estimator.EvalSpec(input_fn=lambda: input_fn(False, FLAGS.data_dir, 1))
 
-    #eval_results = model.evaluate(
-    #    input_fn=lambda: input_fn(False, FLAGS.data_dir, 1),
-        #steps=10  # For debug
-    #)
-    #print(eval_results)
-    #  plt.imshow(prediction['image'])
-    #  plt.show()
+    # Evaluate the model and print results
+    eval_results = model.evaluate(
+        # Batch size must be 1 for testing because the images' size differs
+        input_fn=lambda: input_fn(True, FLAGS.data_dir, 1),
+        # steps=1  # For debug
+    )
+    print(eval_results)
+
+    #tf.estimator.train_and_evaluate(model, train_spec, eval_spec)
+
+    #serving_input_fn = tf.estimator.export.build_parsing_serving_input_receiver_fn(
+    #    tf.feature_column.make_parse_example_spec([tf.FixedLenFeature(shape=[_WIDTH, _HEIGHT, _DEPTH], dtype=tf.uint8)]))
+    #model.export_saved_model('saved_model', serving_input_fn)
+
+  #model.export_saved_model('saved_model', serving_input_fn())
+
+print('complete')
 
 if __name__ == '__main__':
   FLAGS, unparsed = parser.parse_known_args()
