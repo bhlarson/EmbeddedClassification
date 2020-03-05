@@ -292,11 +292,22 @@ def main(unused_argv):
       #prediction = predict_fn({'features': [record[0]]})
       #plt.show()
 
-      imageInput = tf.estimator.inputs.numpy_input_fn(x={"features": record[0]}, shuffle=False, batch_size=1)
+      plt.imshow(record[0][0])
+      gender = 'female'
+      if record[1]['gender']:
+          gender = 'male'
+      name = np.array(record[1]['name'][0])
+      plt.title('{}: {} age {:.3} '.format(name.astype('<U13'), gender, record[1]['age'][0]))
+      #plt.subtitle('prediction age {} gender {}'.format( prediction['pred_age'], prediction['gender']))
+      #plt.savefig('record.png')
+      plt.show()
 
-      predictions = model.predict(input_fn=imageInput)
+      # https://towardsdatascience.com/an-advanced-example-of-tensorflow-estimators-part-1-3-c9ffba3bff03
+      #imageInput = tf.estimator.inputs.numpy_input_fn(x={"features": record[0]}, shuffle=False, batch_size=1)
 
-      for i, prediction in enumerate(predictions):
+      #predictions = model.predict(input_fn=imageInput)
+
+      '''for i, prediction in enumerate(predictions):
         print(i)
         plt.imshow(record[0][0])
         gender = 'female'
@@ -304,7 +315,8 @@ def main(unused_argv):
           gender = 'male'
         plt.title('{} {:.3} {}'.format(record[1]['name'][0], record[1]['age'][0], gender))
         plt.subtitle('prediction age {} gender {}'.format( prediction['pred_age'], prediction['gender']))
-        plt.savefig('record.png')
+        #plt.savefig('record.png')
+        plt.show()'''
 
   print('complete')
 
