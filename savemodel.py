@@ -1,3 +1,8 @@
+"""Train a Resnet model for age classification and gender regression from the imdb dataset."""
+#from __future__ import absolute_import
+#from __future__ import division
+#from __future__ import print_function
+
 if False:
     # https://code.visualstudio.com/docs/python/debugging#_remote-debugging
     # Launch applicaiton on remote computer: 
@@ -15,7 +20,7 @@ import os
 import sys
 import shutil
 import glob
-import cv2
+
 import tensorflow as tf
 
 import resnet_model
@@ -27,7 +32,6 @@ print('Tensorflow version {}'.format(tf.__version__))
 print('GPU Available: {}'.format(tf.test.is_gpu_available()))
 if(tf.test.is_gpu_available()):
   print('GPU Devices: {}'.format(tf.test.gpu_device_name()))
-
 
 parser = argparse.ArgumentParser()
 
@@ -52,7 +56,7 @@ parser.add_argument('--epochs_per_eval', type=int, default=1,
 parser.add_argument('--tensorboard_images_max_outputs', type=int, default=6,
                     help='Max number of batch elements to generate for Tensorboard.')
 
-parser.add_argument('--batch_size', type=int, default=24,
+parser.add_argument('--batch_size', type=int, default=3,
                     help='Number of examples per batch.')
 
 parser.add_argument('--learning_rate_policy', type=str, default='poly',
@@ -63,7 +67,7 @@ parser.add_argument('--max_iter', type=int, default=30,
                     help='Number of maximum iteration used for "poly" learning rate policy.')
 
 parser.add_argument('--data_dir', type=str, 
-                    default='/store/Datasets/imdb/imdb_crop/26',
+                    default='/store/Datasets/imdb',
                     #default='C:\\data\\datasets\\imdb',
                     help='Path to the directory containing the imdb data tf record.')
 
@@ -102,10 +106,7 @@ parser.add_argument('--debug', action='store_true',
 parser.add_argument('--resnet_size', type=int, default=101,
                     help='Resnet size (18, 34, 50, 101, 152, 200)')
 
-parser.add_argument('--savedmodel', type=str, 
-                    default='saved_model/1583353040',
-                    #default='C:\\data\\training\\imdb\\savedmodel\\1582542379',
-                    help='Path to the pre-trained model checkpoint.')
+parser.add_argument('--savedmodel', type=str, default='./saved_model', help='Path to fcn savedmodel.')
 
 
 _NUM_CLASSES = 21
@@ -116,6 +117,11 @@ _MIN_SCALE = 0.5
 _MAX_SCALE = 2.0
 _IGNORE_LABEL = 255
 
+_POWER = 0.9
+_MOMENTUM = 0.9
+
+_BATCH_NORM_DECAY = 0.9997
+
 def serving_input_fn():
     shape = [_HEIGHT, _WIDTH, _DEPTH]
     features = {
@@ -123,41 +129,48 @@ def serving_input_fn():
     }
     return tf.estimator.export.build_parsing_serving_input_receiver_fn(features)
 
+def main(unused_argv):
+  #tf.compat.v1.enable_eager_execution
 
-def main(FLAGS):
+  if FLAGS.clean_model_dir:
+    shutil.rmtree(FLAGS.model_dir, ignore_errors=True)
 
-  # model = tf.saved_model.load(FLAGS.savedmodel) # tf2
+  params = {
+          'output_stride': FLAGS.output_stride,
+          'batch_size': FLAGS.batch_size,
+          'base_architecture': FLAGS.base_architecture,
+          'pre_trained_model': FLAGS.pre_trained_model,
+          'batch_norm_decay': _BATCH_NORM_DECAY,
+          'num_classes': _NUM_CLASSES,
+          'tensorboard_images_max_outputs': FLAGS.tensorboard_images_max_outputs,
+          'weight_decay': FLAGS.weight_decay,
+          'learning_rate_policy': FLAGS.learning_rate_policy,
+          'initial_learning_rate': FLAGS.initial_learning_rate,
+          'max_iter': FLAGS.max_iter,
+          'end_learning_rate': FLAGS.end_learning_rate,
+          'power': _POWER,
+          'momentum': _MOMENTUM,
+          'freeze_batch_norm': FLAGS.freeze_batch_norm,
+          'initial_global_step': FLAGS.initial_global_step,
+          'resnet_size': FLAGS.resnet_size,
+          'kGender':50.0,
+          'kAge':1.0,
+          'learning_rate':1e-3,
+          'data_format':None,
+      }
 
-  imageFiles = glob.glob(FLAGS.data_dir+'/*.jpg')
+  # Set up a RunConfig to only save checkpoints once per training cycle.
+  run_config = tf.estimator.RunConfig().replace(save_checkpoints_secs=1e9)
+  model = tf.estimator.Estimator(
+      model_fn=resnet_model.resnetv2_model_fn,
+      model_dir=FLAGS.model_dir,
+      config=run_config,
+      params=params)
 
-  model = tf.contrib.predictor.from_saved_model(FLAGS.savedmodel)
+  savedmodel = model.export_saved_model(FLAGS.savedmodel, serving_input_fn())
 
-  with tf.Session(graph=tf.Graph()) as sess:
-      tf.saved_model.loader.load(
-          sess,
-          [tf.saved_model.tag_constants.SERVING],
-          FLAGS.savedmodel
-      )
-      shape = [_HEIGHT, _WIDTH, _DEPTH]
-      #image = tf.FixedLenFeature(shape=shape, dtype=tf.string)
-      image = tf.placeholder(tf.uint8, shape=shape, name="features")
-
-      for i, imgFile in enumerate(imageFiles):
-          img = cv2.imread(imgFile,cv2.IMREAD_COLOR)
-          img = cv2.resize(img, (_WIDTH,_HEIGHT))
-          prediction = sess.run('features',feed_dict={image: img})
-
-          fig = plt.figure(figsize=(7,11))
-          ax1 = fig.add_subplot(3,1,1)
-          ax1.imshow(record[0][0])
-          ax2 = fig.add_subplot(3,1,2)
-          ax2.imshow(tf.squeeze(record[1][0], axis=2))
-          ax3 = fig.add_subplot(3,1,3)
-          ax3.imshow(prediction)
-          plt.show()
-
-  print('complete')
+  print('savedmodel {}'.format(savedmodel.decode('utf-8')))
 
 if __name__ == '__main__':
   FLAGS, unparsed = parser.parse_known_args()
-  main(FLAGS)
+  tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)

@@ -239,7 +239,7 @@ def input_fn(is_training, data_dir, batch_size, num_epochs=1):
   return images, labels
 
 def serving_input_fn():
-    shape = [_WIDTH, _HEIGHT, _DEPTH]
+    shape = [_HEIGHT, _WIDTH, _DEPTH]
     features = {
         "features" : tf.FixedLenFeature(shape=shape, dtype=tf.string),
     }

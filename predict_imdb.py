@@ -3,7 +3,7 @@
 #from __future__ import division
 #from __future__ import print_function
 
-if True:
+if False:
     # https://code.visualstudio.com/docs/python/debugging#_remote-debugging
     # Launch applicaiton on remote computer: 
     # > python3 -m ptvsd --host 10.150.41.30 --port 3000 --wait predict_imdb.py

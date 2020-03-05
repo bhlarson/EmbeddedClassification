@@ -248,9 +248,6 @@ def serving_input_fn():
 def main(unused_argv):
   tf.compat.v1.enable_eager_execution
 
-  if FLAGS.clean_model_dir:
-    shutil.rmtree(FLAGS.model_dir, ignore_errors=True)
-
   params = {
           'output_stride': FLAGS.output_stride,
           'batch_size': FLAGS.batch_size,
@@ -307,8 +304,10 @@ def main(unused_argv):
     # Evaluate the model and print results
     predictions = model.predict(input_fn=lambda: input_fn(False, FLAGS.data_dir, 1))
     for i, prediction in enumerate(predictions):
-      print('{}: pred_age {}, pred_gender {}, '.format(i, prediction['pred_age'],prediction['pred_gender']))
+      msg = '{}: pred_age {}, pred_gender {}, '.format(i, prediction['pred_age'],prediction['pred_gender'])
+      print(msg)
       plt.imshow(prediction['image'])
+      plt.title(msg)
       plt.show()
 
 
