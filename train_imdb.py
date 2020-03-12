@@ -3,17 +3,6 @@
 #from __future__ import division
 #from __future__ import print_function
 
-if False:
-    # https://code.visualstudio.com/docs/python/debugging#_remote-debugging
-    # Launch applicaiton on remote computer: 
-    # > python3 -m ptvsd --host 10.150.41.30 --port 3000 --wait train_imdb.py
-    import ptvsd
-    # Allow other computers to attach to ptvsd at this IP address and port.
-    ptvsd.enable_attach(address=('10.150.41.30', 3000), redirect_output=True)
-    # Pause the program until a remote debugger is attached
-    print("Wait for debugger attach")
-    ptvsd.wait_for_attach()
-
 
 import argparse
 import os
@@ -26,6 +15,7 @@ import tensorflow as tf
 import resnet_model
 from utils import preprocessing
 from tensorflow.python import debug as tf_debug
+from tensorboard import program
 
 print('Python Version {}'.format(sys.version))
 print('Tensorflow version {}'.format(tf.__version__))
@@ -41,7 +31,7 @@ parser.add_argument('--model_dir', type=str, default='./model',
 parser.add_argument('--clean_model_dir', action='store_true',
                     help='Whether to clean up the model directory if present.')
 
-parser.add_argument('--train_epochs', type=int, default=20,
+parser.add_argument('--train_epochs', type=int, default=200,
                     help='Number of training epochs: '
                          'For 30K iteration with batch size 6, train_epoch = 17.01 (= 30K * 6 / 10,582). '
                          'For 30K iteration with batch size 8, train_epoch = 22.68 (= 30K * 8 / 10,582). '
@@ -56,7 +46,7 @@ parser.add_argument('--epochs_per_eval', type=int, default=1,
 parser.add_argument('--tensorboard_images_max_outputs', type=int, default=6,
                     help='Max number of batch elements to generate for Tensorboard.')
 
-parser.add_argument('--batch_size', type=int, default=3,
+parser.add_argument('--batch_size', type=int, default=16,
                     help='Number of examples per batch.')
 
 parser.add_argument('--learning_rate_policy', type=str, default='poly',
@@ -100,12 +90,13 @@ parser.add_argument('--initial_global_step', type=int, default=0,
 parser.add_argument('--weight_decay', type=float, default=2e-4,
                     help='The weight decay to use for regularizing the model.')
 
-parser.add_argument('--debug', action='store_true',
+parser.add_argument('--debug_hooks', action='store_true',
                     help='Whether to use debugger to track down bad values during training.')
 
 parser.add_argument('--resnet_size', type=int, default=101,
                     help='Resnet size (18, 34, 50, 101, 152, 200)')
 
+parser.add_argument('--debug', type=bool, default=False, help='True, eanble debug and stop at breakpoint')
 
 _NUM_CLASSES = 21
 _HEIGHT = 200
@@ -223,20 +214,16 @@ def input_fn(is_training, data_dir, batch_size, num_epochs=1):
     # randomness, while smaller sizes have better performance.
     # is a relatively small dataset, we choose to shuffle the full epoch.
     dataset = dataset.shuffle(buffer_size=500)
+    # We call repeat after shuffling, rather than before, to prevent separate epochs from blending together.
+    dataset = dataset.repeat(num_epochs)
 
   dataset = dataset.map(parse_record)
   dataset = dataset.map(lambda image, label: preprocess_image(image, label, is_training))
+  
+  dataset = dataset.batch(batch_size)
   dataset = dataset.prefetch(batch_size)
 
-  # We call repeat after shuffling, rather than before, to prevent separate
-  # epochs from blending together.
-  dataset = dataset.repeat(num_epochs)
-  dataset = dataset.batch(batch_size)
-
-  iterator = dataset.make_one_shot_iterator()
-  images, labels = iterator.get_next()
-
-  return images, labels
+  return dataset
 
 def serving_input_fn():
     shape = [_HEIGHT, _WIDTH, _DEPTH]
@@ -276,6 +263,14 @@ def main(unused_argv):
           'data_format':None,
       }
 
+  # Launch tensorboard for training
+  # Remove http messages
+  tf.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+  tb = program.TensorBoard()
+  tb.configure(argv=[None, '--logdir', FLAGS.model_dir])
+  url = tb.launch()
+  print('TensorBoard at {}'.format(url))
+
   # Set up a RunConfig to only save checkpoints once per training cycle.
   run_config = tf.estimator.RunConfig().replace(save_checkpoints_secs=1e9)
   model = tf.estimator.Estimator(
@@ -297,7 +292,7 @@ def main(unused_argv):
     train_hooks = [logging_hook]
     eval_hooks = None
 
-    if FLAGS.debug:
+    if FLAGS.debug_hooks:
       debug_hook = tf_debug.LocalCLIDebugHook()
       train_hooks.append(debug_hook)
       eval_hooks = [debug_hook]
@@ -335,4 +330,19 @@ print('complete')
 
 if __name__ == '__main__':
   FLAGS, unparsed = parser.parse_known_args()
+
+  if FLAGS.debug:
+      print("Wait for debugger attach")
+      import ptvsd
+      # https://code.visualstudio.com/docs/python/debugging#_remote-debugging
+      # Launch applicaiton on remote computer: 
+      # > python3 -m ptvsd --host 10.150.41.30 --port 3000 --wait fcn/train.py
+      # Allow other computers to attach to ptvsd at this IP address and port.
+      ptvsd.enable_attach(address=('0.0.0.0', 3000), redirect_output=True)
+      # Pause the program until a remote debugger is attached
+
+      ptvsd.wait_for_attach()
+
+      print("Debugger attach")
+
   tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)

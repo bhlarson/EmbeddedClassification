@@ -130,31 +130,37 @@ def main(FLAGS):
 
   imageFiles = glob.glob(FLAGS.data_dir+'/*.jpg')
 
-  model = tf.contrib.predictor.from_saved_model(FLAGS.savedmodel)
+  with tf.Session() as sess:
+    # First load the SavedModel into the session    
+    tf.saved_model.load(sess, [tf.saved_model.tag_constants.SERVING],FLAGS.savedmodel)
+    graph = tf.get_default_graph()
+    for i, op in enumerate(graph.get_operations()):
+      if op.name:
+        print(op.name)
+      else:
+        print(op.node_def.name)
+    features = graph.get_tensor_by_name("features:0")
+    pred_gender = graph.get_tensor_by_name("pred_gender:0")
+    pred_age = graph.get_tensor_by_name("pred_age:0")
 
-  with tf.Session(graph=tf.Graph()) as sess:
-      tf.saved_model.loader.load(
-          sess,
-          [tf.saved_model.tag_constants.SERVING],
-          FLAGS.savedmodel
-      )
-      shape = [_HEIGHT, _WIDTH, _DEPTH]
-      #image = tf.FixedLenFeature(shape=shape, dtype=tf.string)
-      image = tf.placeholder(tf.uint8, shape=shape, name="features")
 
-      for i, imgFile in enumerate(imageFiles):
-          img = cv2.imread(imgFile,cv2.IMREAD_COLOR)
-          img = cv2.resize(img, (_WIDTH,_HEIGHT))
-          prediction = sess.run('features',feed_dict={image: img})
+    image = tf.placeholder(tf.float32, shape=[None, _HEIGHT, _WIDTH, _DEPTH], name="input_image")
 
-          fig = plt.figure(figsize=(7,11))
-          ax1 = fig.add_subplot(3,1,1)
-          ax1.imshow(record[0][0])
-          ax2 = fig.add_subplot(3,1,2)
-          ax2.imshow(tf.squeeze(record[1][0], axis=2))
-          ax3 = fig.add_subplot(3,1,3)
-          ax3.imshow(prediction)
-          plt.show()
+    for i, imgFile in enumerate(imageFiles):
+      img = cv2.imread(imgFile,cv2.IMREAD_COLOR)
+      img = cv2.resize(img, (_WIDTH,_HEIGHT))
+      pred = sess.run(pred_gender, feed_dict={image: [img]})
+
+      fig = plt.figure(figsize=(7,11))
+      ax1 = fig.add_subplot(3,1,1)
+      ax1.imshow(record[0][0])
+      ax2 = fig.add_subplot(3,1,2)
+      ax2.imshow(tf.squeeze(record[1][0], axis=2))
+      ax3 = fig.add_subplot(3,1,3)
+      ax3.imshow(pred)
+      plt.show()
+
+    output = sess.run([output_tensor], feed_dict={input_tensor: input_data})
 
   print('complete')
 

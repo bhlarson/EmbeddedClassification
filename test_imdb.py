@@ -221,15 +221,13 @@ def input_fn(is_training, data_dir, batch_size, num_epochs=1):
     # randomness, while smaller sizes have better performance.
     # is a relatively small dataset, we choose to shuffle the full epoch.
     dataset = dataset.shuffle(buffer_size=500)
+    # We call repeat after shuffling, rather than before, to prevent separate epochs from blending together.
+    dataset = dataset.repeat(num_epochs)
 
   dataset = dataset.map(parse_record)
-  dataset = dataset.map(lambda image, label: preprocess_image(image, label, is_training))
-  dataset = dataset.prefetch(batch_size)
-
-  # We call repeat after shuffling, rather than before, to prevent separate
-  # epochs from blending together.
-  dataset = dataset.repeat(num_epochs)
+  
   dataset = dataset.batch(batch_size)
+  dataset = dataset.prefetch(batch_size)
 
   return dataset
 

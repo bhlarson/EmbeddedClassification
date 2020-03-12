@@ -280,7 +280,7 @@ def resnet_v2( resnet_size, data_format=None):
 def resnetv2_model_fn(features, labels, mode, params):
   if isinstance(features, dict):  # export_saved_models
     features = features['features']
-
+  features = tf.identity(features, 'features')
   network = resnet_v2(params['resnet_size'])
 
   images = tf.cast(features,tf.float32)
@@ -293,12 +293,11 @@ def resnetv2_model_fn(features, labels, mode, params):
   num_classes_gender = 2
   inputs = tf.layers.dense(inputs=final, units=num_classes_gender)
   logits_gender = tf.identity(inputs, 'final_dense_gender')
-  pred_gender = tf.argmax(logits_gender,axis=1)
+  pred_gender = tf.argmax(logits_gender,axis=1, name='pred_gender')
 
   # Age regression
   num_classes_age = 1
-  final_dense_age = tf.layers.dense(inputs=final, units=num_classes_age)
-  pred_age = tf.identity(final_dense_age, 'pred_age')
+  pred_age = tf.layers.dense(inputs=final, units=num_classes_age, name='pred_age')
 
   predictions = {
       'pred_age': pred_age,

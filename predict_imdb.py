@@ -224,18 +224,13 @@ def input_fn(is_training, data_dir, batch_size, num_epochs=1):
     # randomness, while smaller sizes have better performance.
     # is a relatively small dataset, we choose to shuffle the full epoch.
     dataset = dataset.shuffle(buffer_size=500)
+    # We call repeat after shuffling, rather than before, to prevent separate epochs from blending together.
+    dataset = dataset.repeat(num_epochs)
 
   dataset = dataset.map(parse_record)
-  dataset = dataset.map(lambda image, label: preprocess_image(image, label, is_training))
-  dataset = dataset.prefetch(batch_size)
-
-  # We call repeat after shuffling, rather than before, to prevent separate
-  # epochs from blending together.
-  dataset = dataset.repeat(num_epochs)
+  
   dataset = dataset.batch(batch_size)
-
-  #iterator = dataset.make_one_shot_iterator()
-  #images, labels = iterator.get_next()
+  dataset = dataset.prefetch(batch_size)
 
   return dataset
 
@@ -245,6 +240,12 @@ def serving_input_fn():
         "features" : tf.FixedLenFeature(shape=shape, dtype=tf.string),
     }
     return tf.estimator.export.build_parsing_serving_input_receiver_fn(features)
+
+def predict_input_fn(img):
+    features = {
+        "features" : tf.convert_to_tensor(img),
+    }
+    return features
 
 def main(unused_argv):
   tf.enable_eager_execution()
@@ -292,22 +293,23 @@ def main(unused_argv):
       #prediction = predict_fn({'features': [record[0]]})
       #plt.show()
 
-      plt.imshow(record[0][0])
-      gender = 'female'
-      if record[1]['gender']:
-          gender = 'male'
-      name = np.array(record[1]['name'][0])
-      plt.title('{}: {} age {:.3} '.format(name.astype('<U13'), gender, record[1]['age'][0]))
+      #plt.imshow(record[0][0])
+      #gender = 'female'
+      #if record[1]['gender']:
+      #    gender = 'male'
+      #name = np.array(record[1]['name'][0])
+      #plt.title('{}: {} age {:.3} '.format(name.astype('<U13'), gender, record[1]['age'][0]))
       #plt.subtitle('prediction age {} gender {}'.format( prediction['pred_age'], prediction['gender']))
       #plt.savefig('record.png')
-      plt.show()
+      #plt.show()
 
       # https://towardsdatascience.com/an-advanced-example-of-tensorflow-estimators-part-1-3-c9ffba3bff03
-      #imageInput = tf.estimator.inputs.numpy_input_fn(x={"features": record[0]}, shuffle=False, batch_size=1)
+      #predict_input_fn = tf.estimator.inputs.numpy_input_fn(x={'features':record[0]},batch_size=1, shuffle=False)
 
-      #predictions = model.predict(input_fn=imageInput)
 
-      '''for i, prediction in enumerate(predictions):
+      predict_results = model.predict(input_fn=predict_input_fn(record[0]))
+
+      for j, prediction in enumerate(predict_results):
         print(i)
         plt.imshow(record[0][0])
         gender = 'female'
@@ -316,7 +318,7 @@ def main(unused_argv):
         plt.title('{} {:.3} {}'.format(record[1]['name'][0], record[1]['age'][0], gender))
         plt.subtitle('prediction age {} gender {}'.format( prediction['pred_age'], prediction['gender']))
         #plt.savefig('record.png')
-        plt.show()'''
+        plt.show()
 
   print('complete')
 
