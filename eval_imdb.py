@@ -3,17 +3,17 @@
 #from __future__ import division
 #from __future__ import print_function
 
-if False:
+if True:
     # https://code.visualstudio.com/docs/python/debugging#_remote-debugging
     # Launch applicaiton on remote computer: 
     # > python3 -m ptvsd --host 10.150.41.30 --port 3000 --wait train_imdb.py
     import ptvsd
     # Allow other computers to attach to ptvsd at this IP address and port.
-    ptvsd.enable_attach(address=('10.150.41.30', 3000), redirect_output=True)
+    ptvsd.enable_attach(address=('0.0.0.0', 3000), redirect_output=True)
     # Pause the program until a remote debugger is attached
     print("Wait for debugger attach")
     ptvsd.wait_for_attach()
-
+    print("Debugger attached")
 
 import argparse
 import os
@@ -67,7 +67,7 @@ parser.add_argument('--max_iter', type=int, default=30,
                     help='Number of maximum iteration used for "poly" learning rate policy.')
 
 parser.add_argument('--data_dir', type=str, 
-                    default='/store/Datasets/imdb',
+                    default='/trainingset',
                     #default='C:\\data\\datasets\\imdb',
                     help='Path to the directory containing the imdb data tf record.')
 
@@ -77,7 +77,7 @@ parser.add_argument('--base_architecture', type=str, default='resnet_v2_101',
 
 # Pre-trained models: https://github.com/tensorflow/models/blob/master/research/slim/README.md
 parser.add_argument('--pre_trained_model', type=str, 
-                    default='/store/training/resnet_v2_101_2017_04_14/resnet_v2_101.ckpt',
+                    default='./model/',
                     #default='C:\\data\\training\\resnet_v2_101_2017_04_14\\resnet_v2_101.ckpt',
                     help='Path to the pre-trained model checkpoint.')
 
