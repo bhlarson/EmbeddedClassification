@@ -1,17 +1,15 @@
 """Train a Resnet model for age classification and gender regression from the imdb dataset."""
-#from __future__ import absolute_import
-#from __future__ import division
-#from __future__ import print_function
+# Run with tensorflow container: FROM tensorflow/tensorflow:2.1.0-gpu-py3
 
 import argparse
 import os
 import sys
 import shutil
 import glob
-
+import numpy as np
 import tensorflow as tf
 
-import resnet_model
+import resnet_modelv2 as resnet_model
 #from tensorflow.python.tools import freeze_graph
 
 print('Python Version {}'.format(sys.version))
@@ -87,6 +85,7 @@ parser.add_argument('--initial_global_step', type=int, default=0,
 parser.add_argument('--weight_decay', type=float, default=2e-4,
                     help='The weight decay to use for regularizing the model.')
 
+#parser.add_argument('--debug', action='store_true', help='Wait for debugge attach.')
 parser.add_argument('--debug', type=bool, default=True, help='Wait for debugge attach')
 
 parser.add_argument('--resnet_size', type=int, default=101,
@@ -110,13 +109,6 @@ _MOMENTUM = 0.9
 
 _BATCH_NORM_DECAY = 0.9997
 
-def serving_input_fn():
-    shape = [_HEIGHT, _WIDTH, _DEPTH]
-    features = {
-        "features" : tf.FixedLenFeature(shape=shape, dtype=tf.string),
-    }
-    return tf.estimator.export.build_parsing_serving_input_receiver_fn(features)
-
 '''def freeze_model(saved_model_dir, output_filename, output_node_names):
     output_graph_filename = os.path.join(saved_model_dir, output_filename)
     initializer_nodes = ''
@@ -138,8 +130,13 @@ def serving_input_fn():
     )
     print('graph frozen!')'''
 
+def serving_input_receiver_fn():
+    shape = [_HEIGHT, _WIDTH, _DEPTH]
+    image = tf.compat.v1.placeholder(dtype=tf.uint8, shape=shape, name='image')
+    images = tf.expand_dims(image, 0)
+    return tf.estimator.export.TensorServingInputReceiver(images, image)
+
 def main(unused_argv):
-  #tf.compat.v1.enable_eager_execution
 
   if FLAGS.clean_model_dir:
     shutil.rmtree(FLAGS.model_dir, ignore_errors=True)
@@ -176,7 +173,8 @@ def main(unused_argv):
       config=run_config,
       params=params)
 
-  savedmodel = model.export_saved_model(FLAGS.savedmodel, serving_input_fn(), as_text=True)
+
+  savedmodel = model.export_saved_model(FLAGS.savedmodel, serving_input_receiver_fn, experimental_mode=tf.estimator.ModeKeys.PREDICT, as_text=True)
 
   print('savedmodel {}'.format(savedmodel.decode('utf-8')))
 
@@ -187,31 +185,26 @@ def main(unused_argv):
     open(FLAGS.tflitemodel+"model.tflite", "wb").write(tflite_model)
 
   if True:
-    # https://docs.nvidia.com/deeplearning/frameworks/tf-trt-user-guide/index.html#worflow-with-savedmodel
-    from tensorflow.python.compiler.tensorrt import trt_convert as trt
+    # https://docs.nvidia.com/deeplearning/frameworks/tf-trt-user-guide/index.html
+    from tensorflow.python.compiler.tensorrt import trt_convert
     output_saved_model_dir = FLAGS.savedmodel+'TRT'
 
-    tfver = TF2
-    if tfver == TF1:
-        converter = trt.TrtGraphConverter(
-            input_saved_model_dir=savedmodel,
-            max_workspace_size_bytes=(11<32),
-            precision_mode="FP16",
-            maximum_cached_engines=100)
-    elif tfver == TF2:
-        conversion_params = trt.DEFAULT_TRT_CONVERSION_PARAMS
-        conversion_params = conversion_params._replace(
-            max_workspace_size_bytes=(1<<32))
-        conversion_params = conversion_params._replace(precision_mode="FP16")
-        conversion_params = conversion_params._replace(
-            maximum_cached_engiens=100)
+    conversion_params = trt_convert.DEFAULT_TRT_CONVERSION_PARAMS
+    conversion_params = conversion_params._replace(max_workspace_size_bytes=(1<<32))
+    conversion_params = conversion_params._replace(precision_mode="FP16")
+    conversion_params = conversion_params._replace(maximum_cached_engines=100)
+    conversion_params = conversion_params._replace(minimum_segment_size=1)
 
-        converter = trt.TrtGraphConverterV2(
-            input_saved_model_dir=input_saved_model_dir,
-            conversion_params=conversion_params)
-
-
+    converter = trt_convert.TrtGraphConverterV2(input_saved_model_dir=savedmodel.decode('utf-8'),conversion_params=conversion_params)
     converter.convert()
+    # converter.build fails.  Continue with converter.convert to see if network will run.
+    #num_runs = 1 # Not clearly defined.  May be number of runs in calibration: https://github.com/tensorflow/tensorflow/blob/master/tensorflow/python/compiler/tensorrt/trt_convert.py
+    #def my_input_fn():
+        #return np.random.normal(size=(_HEIGHT, _WIDTH, _DEPTH)).astype(np.int8)
+    #    for _ in range(num_runs):
+    #        inp1 = np.random.normal(size=(_HEIGHT, _WIDTH, _DEPTH)).astype(np.float32)
+    #        yield inp1
+    #converter.build(input_fn=my_input_fn)
     converter.save(output_saved_model_dir)
 
     #with tf.Session() as sess:

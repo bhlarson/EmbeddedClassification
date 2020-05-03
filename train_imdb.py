@@ -31,7 +31,7 @@ parser.add_argument('--model_dir', type=str, default='./model',
 parser.add_argument('--clean_model_dir', action='store_true',
                     help='Whether to clean up the model directory if present.')
 
-parser.add_argument('--train_epochs', type=int, default=200,
+parser.add_argument('--train_epochs', type=int, default=2,
                     help='Number of training epochs: '
                          'For 30K iteration with batch size 6, train_epoch = 17.01 (= 30K * 6 / 10,582). '
                          'For 30K iteration with batch size 8, train_epoch = 22.68 (= 30K * 8 / 10,582). '
@@ -233,7 +233,6 @@ def serving_input_fn():
     return tf.estimator.export.build_parsing_serving_input_receiver_fn(features)
 
 def main(unused_argv):
-  tf.compat.v1.enable_eager_execution
 
   if FLAGS.clean_model_dir:
     shutil.rmtree(FLAGS.model_dir, ignore_errors=True)
@@ -319,10 +318,6 @@ def main(unused_argv):
     eval_spec = tf.estimator.EvalSpec(input_fn=lambda: input_fn(False, FLAGS.data_dir, 1))
 
     tf.estimator.train_and_evaluate(model, train_spec, eval_spec)
-
-    #serving_input_fn = tf.estimator.export.build_parsing_serving_input_receiver_fn(
-    #    tf.feature_column.make_parse_example_spec([tf.FixedLenFeature(shape=[_WIDTH, _HEIGHT, _DEPTH], dtype=tf.uint8)]))
-    #model.export_saved_model('saved_model', serving_input_fn)
 
   model.export_saved_model('saved_model', serving_input_fn())
 

@@ -243,7 +243,7 @@ def serving_input_fn():
     }
     return tf.estimator.export.build_parsing_serving_input_receiver_fn(features)
 
-def main(unused_argv):
+def main(FLAGS):
   tf.compat.v1.enable_eager_execution
 
   params = {
@@ -304,9 +304,9 @@ def main(unused_argv):
     for i, prediction in enumerate(predictions):
       msg = '{}: pred_age {}, pred_gender {}, '.format(i, prediction['pred_age'],prediction['pred_gender'])
       print(msg)
-      plt.imshow(prediction['image'])
-      plt.title(msg)
-      plt.show()
+      #plt.imshow(prediction['image'])
+      #plt.title(msg)
+      #plt.show()
 
 
     #eval_results = model.evaluate(
@@ -319,4 +319,4 @@ def main(unused_argv):
 
 if __name__ == '__main__':
   FLAGS, unparsed = parser.parse_known_args()
-  tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)
+  main(FLAGS)

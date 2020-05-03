@@ -1,19 +1,20 @@
 """Train a Resnet model for age classification and gender regression from the imdb dataset."""
+# https://medium.com/@jsflo.dev/saving-and-loading-a-tensorflow-model-using-the-savedmodel-api-17645576527
 #from __future__ import absolute_import
 #from __future__ import division
 #from __future__ import print_function
 
-if False:
+if True:
     # https://code.visualstudio.com/docs/python/debugging#_remote-debugging
     # Launch applicaiton on remote computer: 
-    # > python3 -m ptvsd --host 10.150.41.30 --port 3000 --wait predict_imdb.py
+    # > python3 -m ptvsd --host 0.0.0.0 --port 3000 --wait predict_imdb.py
     import ptvsd
     # Allow other computers to attach to ptvsd at this IP address and port.
-    ptvsd.enable_attach(address=('10.150.41.30', 3000), redirect_output=True)
+    ptvsd.enable_attach(address=('0.0.0.0', 3000), redirect_output=True)
     # Pause the program until a remote debugger is attached
     print("Wait for debugger attach")
     ptvsd.wait_for_attach()
-
+    print("Attached")
 
 import argparse
 import os
@@ -23,6 +24,7 @@ import glob
 import matplotlib.pyplot as plt
 import tensorflow as tf
 import numpy as np
+import cv2
 
 import resnet_model
 from utils import preprocessing
@@ -234,21 +236,22 @@ def input_fn(is_training, data_dir, batch_size, num_epochs=1):
 
   return dataset
 
-def serving_input_fn():
+'''def predict_input_fn(img):
     shape = [_WIDTH, _HEIGHT, _DEPTH]
     features = {
-        "features" : tf.FixedLenFeature(shape=shape, dtype=tf.string),
+        "image" : tf.FixedLenFeature(shape=shape, dtype=tf.uint8),
     }
-    return tf.estimator.export.build_parsing_serving_input_receiver_fn(features)
+    return tf.estimator.export.build_parsing_serving_input_receiver_fn(features)'''
 
 def predict_input_fn(img):
+    img = tf.image.resize_with_crop_or_pad(tf.constant(img), _HEIGHT, _WIDTH)
     features = {
-        "features" : tf.convert_to_tensor(img),
+        "features" : tf.expand_dims(img,0),
     }
     return features
 
 def main(unused_argv):
-  tf.enable_eager_execution()
+  #tf.enable_eager_execution()
   if FLAGS.clean_model_dir:
     shutil.rmtree(FLAGS.model_dir, ignore_errors=True)
 
@@ -284,11 +287,12 @@ def main(unused_argv):
 
 
 
-  dataset = input_fn(False, FLAGS.data_dir, 1)
+  #dataset = input_fn(False, FLAGS.data_dir, 1)
 
-  it = iter(dataset)
+  #it = iter(dataset)
 
-  for i, record in enumerate(it):
+  imgs = glob.glob('/store/Datasets/imdb/imdb_crop/00/'+'/*.jpg')
+  for i, imfile in enumerate(imgs):
       #prediction = predict_fn.signatures["features"](examples=tf.constant([record['image']])) # TF2
       #prediction = predict_fn({'features': [record[0]]})
       #plt.show()
@@ -306,19 +310,27 @@ def main(unused_argv):
       # https://towardsdatascience.com/an-advanced-example-of-tensorflow-estimators-part-1-3-c9ffba3bff03
       #predict_input_fn = tf.estimator.inputs.numpy_input_fn(x={'features':record[0]},batch_size=1, shuffle=False)
 
+      img = cv2.imread(imfile)
 
-      predict_results = model.predict(input_fn=predict_input_fn(record[0]))
+      predictions = model.predict(input_fn=lambda: predict_input_fn(img))
 
-      for j, prediction in enumerate(predict_results):
-        print(i)
-        plt.imshow(record[0][0])
-        gender = 'female'
-        if record[1]['gender']:
-          gender = 'male'
-        plt.title('{} {:.3} {}'.format(record[1]['name'][0], record[1]['age'][0], gender))
-        plt.subtitle('prediction age {} gender {}'.format( prediction['pred_age'], prediction['gender']))
-        #plt.savefig('record.png')
-        plt.show()
+      for prediction in predictions:
+          msg = '{}: pred_age {}, pred_gender {}, '.format(i, prediction['pred_age'],prediction['pred_gender'])
+          print(msg)
+          break
+
+          #for j, prediction in enumerate(predict_results):
+          #  print('{} record {}, results {}'.format(i, record[1], predict_results))
+          #  print(i)
+          #  plt.imshow(record[0][0])
+          #  gender = 'female'
+          #  if record[1]['gender']:
+          #    gender = 'male'
+          #  plt.title('{} {:.3} {}'.format(record[1]['name'][0], record[1]['age'][0], gender))
+          #  plt.subtitle('prediction age {} gender {}'.format( prediction['pred_age'], prediction['gender']))
+            #plt.savefig('record.png')
+          #  plt.show()
+
 
   print('complete')
 

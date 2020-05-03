@@ -21,7 +21,7 @@ def batch_norm_relu(inputs, is_training, data_format):
   """Performs a batch normalization followed by a ReLU."""
   # We set fused=True for a significant performance boost. See
   # https://www.tensorflow.org/performance/performance_guide#common_fused_ops
-  inputs = tf.layers.batch_normalization(
+  inputs = tf.compat.v1.layers.batch_normalization(
       inputs=inputs, axis=1 if data_format == 'channels_first' else 3,
       momentum=_BATCH_NORM_DECAY, epsilon=_BATCH_NORM_EPSILON, center=True,
       scale=True, training=is_training, fused=True)
@@ -48,10 +48,10 @@ def fixed_padding(inputs, kernel_size, data_format):
   pad_end = pad_total - pad_beg
 
   if data_format == 'channels_first':
-    padded_inputs = tf.pad(inputs, [[0, 0], [0, 0],
+    padded_inputs = tf.pad(tensor=inputs, paddings=[[0, 0], [0, 0],
                                     [pad_beg, pad_end], [pad_beg, pad_end]])
   else:
-    padded_inputs = tf.pad(inputs, [[0, 0], [pad_beg, pad_end],
+    padded_inputs = tf.pad(tensor=inputs, paddings=[[0, 0], [pad_beg, pad_end],
                                     [pad_beg, pad_end], [0, 0]])
   return padded_inputs
 
@@ -63,10 +63,10 @@ def conv2d_fixed_padding(inputs, filters, kernel_size, strides, data_format):
   if strides > 1:
     inputs = fixed_padding(inputs, kernel_size, data_format)
 
-  return tf.layers.conv2d(
+  return tf.compat.v1.layers.conv2d(
       inputs=inputs, filters=filters, kernel_size=kernel_size, strides=strides,
       padding=('SAME' if strides == 1 else 'VALID'), use_bias=False,
-      kernel_initializer=tf.variance_scaling_initializer(),
+      kernel_initializer=tf.compat.v1.variance_scaling_initializer(),
       data_format=data_format)
 
 
@@ -217,13 +217,13 @@ def align_resnet_v2_generator(block_fn, layers, data_format=None):
       # Convert the inputs from channels_last (NHWC) to channels_first (NCHW).
       # This provides a large performance boost on GPU. See
       # https://www.tensorflow.org/performance/performance_guide#data_formats
-      inputs = tf.transpose(inputs, [0, 3, 1, 2])
+      inputs = tf.transpose(a=inputs, perm=[0, 3, 1, 2])
 
     inputs = conv2d_fixed_padding(
         inputs=inputs, filters=64, kernel_size=7, strides=2,
         data_format=data_format)
     inputs = tf.identity(inputs, 'initial_conv')
-    inputs = tf.layers.max_pooling2d(
+    inputs = tf.compat.v1.layers.max_pooling2d(
         inputs=inputs, pool_size=3, strides=2, padding='SAME',
         data_format=data_format)
     inputs = tf.identity(inputs, 'initial_max_pool')
@@ -246,7 +246,7 @@ def align_resnet_v2_generator(block_fn, layers, data_format=None):
         data_format=data_format)
 
     inputs = batch_norm_relu(inputs, is_training, data_format)
-    inputs = tf.layers.average_pooling2d(
+    inputs = tf.compat.v1.layers.average_pooling2d(
         inputs=inputs, pool_size=7, strides=1, padding='VALID',
         data_format=data_format)
     inputs = tf.identity(inputs, 'final_avg_pool')
@@ -276,8 +276,9 @@ def resnet_v2( resnet_size, data_format=None):
 
 
 def resnetv2_model_fn(features, labels, mode, params):
-  if isinstance(features, dict):  # export_saved_models
+  if isinstance(features, dict): # If ServingInputReceiver is used.  Recommed tf.estimator.export.TensorServingInputReceiver
     features = features['features']
+
   features = tf.identity(features, 'features')
   network = resnet_v2(params['resnet_size'])
 
@@ -289,19 +290,18 @@ def resnetv2_model_fn(features, labels, mode, params):
 
   # Male/female classification
   num_classes_gender = 2
-  inputs = tf.layers.dense(inputs=final, units=num_classes_gender)
-  logits_gender = tf.identity(inputs, 'final_dense_gender')
-  pred_gender = tf.argmax(logits_gender,axis=1, name='pred_gender')
+  inputs = tf.compat.v1.layers.dense(inputs=final, units=num_classes_gender)
+  logits_gender = tf.identity(inputs, name='final_dense_gender')
+  pred_gender = tf.argmax(input=logits_gender,axis=1, output_type=tf.dtypes.int32)
+  pred_gender = tf.identity(pred_gender, name='pred_gender') # Use Identity rather than argmax name to facility TRT covnersion of argmax
 
   # Age regression
   num_classes_age = 1
-  pred_age = tf.layers.dense(inputs=final, units=num_classes_age, name='pred_age')
+  pred_age = tf.compat.v1.layers.dense(inputs=final, units=num_classes_age, name='pred_age')
 
   predictions = {
       'pred_age': pred_age,
       'pred_gender': pred_gender,
-      'logits_gender': logits_gender,
-      'image':features,
   }
 
   if mode == tf.estimator.ModeKeys.PREDICT:
@@ -317,26 +317,26 @@ def resnetv2_model_fn(features, labels, mode, params):
   #tf.summary.scalar('label_gender', labels['gender'])
   #tf.summary.scalar('pred_gender', pred_gender)
 
-  sum_image = tf.summary.image("image", features, max_outputs=6)
+  sum_image = tf.compat.v1.summary.image("image", features, max_outputs=6)
 
   predictions['label_gender'] = labels['gender']
   predictions['label_age'] = labels['age']
   #predictions['confusion_matrix'] = gender_confusion_matrix
 
   # Classification loss
-  cross_entropy = tf.losses.sparse_softmax_cross_entropy(
+  cross_entropy = tf.compat.v1.losses.sparse_softmax_cross_entropy(
       logits=logits_gender, labels=labels['gender'])
 
   # Create a tensor named cross_entropy for logging purposes.
   tf.identity(cross_entropy, name='classification_cross_entropy')
-  tf.summary.scalar('classification_cross_entropy', cross_entropy)
+  tf.compat.v1.summary.scalar('classification_cross_entropy', cross_entropy)
 
   # Regression loss
-  loss_mse = tf.losses.mean_squared_error(tf.expand_dims(labels['age'],1), pred_age)
+  loss_mse = tf.compat.v1.losses.mean_squared_error(tf.expand_dims(labels['age'],1), pred_age)
 
   # Create a tensor named cross_entropy for logging purposes.
   tf.identity(loss_mse, name='regression_mse')
-  tf.summary.scalar('regression_mse', loss_mse)
+  tf.compat.v1.summary.scalar('regression_mse', loss_mse)
 
   # Add weight decay to the loss.
   lGender = tf.math.scalar_mul(params['kGender'], cross_entropy)
@@ -344,20 +344,20 @@ def resnetv2_model_fn(features, labels, mode, params):
   #with tf.variable_scope("total_loss"):
   loss = tf.math.add( lGender, lAge, name='loss')
 
-  loss = tf.Print(loss,[loss,labels['gender'],pred_gender,labels['age'], pred_age,labels['name']], 'resnetv2')
+  loss = tf.compat.v1.Print(loss,[loss,labels['gender'],pred_gender,labels['age'], pred_age,labels['name']], 'resnetv2')
 
   #if mode == tf.estimator.ModeKeys.EVAL:
   # Compute evaluation metrics.
-  loss_mean = tf.metrics.mean(loss)
-  age_mean = tf.metrics.mean(labels['age'])
-  gender_mean = tf.metrics.mean(labels['gender'])
+  loss_mean = tf.compat.v1.metrics.mean(loss)
+  age_mean = tf.compat.v1.metrics.mean(labels['age'])
+  gender_mean = tf.compat.v1.metrics.mean(labels['gender'])
 
-  age_pred_mean = tf.metrics.mean(pred_age)
-  gender_pred_mean = tf.metrics.mean(pred_gender)
+  age_pred_mean = tf.compat.v1.metrics.mean(pred_age)
+  gender_pred_mean = tf.compat.v1.metrics.mean(pred_gender)
 
-  mean_squared_error_age = tf.metrics.mean_squared_error(labels['age'], pred_age )
-  accuracy_gender = tf.metrics.accuracy( labels['gender'], pred_gender)
-  mean_iou = tf.metrics.mean_iou(labels['gender'], pred_gender, params['num_classes'])
+  mean_squared_error_age = tf.compat.v1.metrics.mean_squared_error(labels['age'], pred_age )
+  accuracy_gender = tf.compat.v1.metrics.accuracy( labels['gender'], pred_gender)
+  mean_iou = tf.compat.v1.metrics.mean_iou(labels['gender'], pred_gender, params['num_classes'])
 
   metrics = {'loss_mean':loss_mean,
                'age_mean':age_mean,
@@ -372,8 +372,8 @@ def resnetv2_model_fn(features, labels, mode, params):
   #  return tf.estimator.EstimatorSpec(mode, predictions=predictions, loss=loss, eval_metric_ops=metrics)
 
   #if mode == tf.estimator.ModeKeys.TRAIN:
-  optimizer = tf.train.AdamOptimizer(params['learning_rate'])
-  train_op = optimizer.minimize(loss, global_step=tf.train.get_global_step())
+  optimizer = tf.compat.v1.train.AdamOptimizer(params['learning_rate'])
+  train_op = optimizer.minimize(loss, global_step=tf.compat.v1.train.get_global_step())
 
   return tf.estimator.EstimatorSpec(mode, predictions=predictions, loss=loss, train_op=train_op, eval_metric_ops=metrics)
 
