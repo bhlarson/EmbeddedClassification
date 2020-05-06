@@ -8,7 +8,7 @@ Dataset: https://data.vision.ee.ethz.ch/cvl/rrothe/imdb-wiki/
 > docker build --rm -f dockerfile -t ec:latest context
 
 1. Run docker image
-   > docker run --gpus '"device=0"' -it --rm -v "$(pwd):/app" -v "/store:/store" -p 6006:6006/tcp -p 3000:3000 ec:latest
+   > docker run --device=/dev/video0:/dev/video0 --gpus '"device=0"' -it --rm -v "$(pwd):/app" -v "/store:/store" -p 6006:6006/tcp -p 5000:5000/tcp -p 3000:3000 ec:latest
 
 1. In docker container, convert dataset into record:
    > python makecrecord.py
@@ -18,6 +18,14 @@ Dataset: https://data.vision.ee.ethz.ch/cvl/rrothe/imdb-wiki/
    > python test_imdb.py # Not yet updated to TF 2
 1. In docker container, evaluate images:
    > python infer_imdb.py
+1. Test on Triton server
+   > docker pull nvcr.io/nvidia/tritonserver:20.03-py3
+   > docker run -it --rm --gpus device=0 --shm-size=1g --ulimit memlock=-1 --ulimit stack=67108864 -p 8000:8000 -p 8001:8001 -p 8002:8002 -v"/data/models/inference/trtis/lit:/models/lit" nvcr.io/nvidia/tritonserver:20.03-py3 trtserver --model-repository=/models
+   > docker run -it --rm --gpus device=0 --shm-size=1g --ulimit memlock=-1 --ulimit stack=67108864 -p 8000:8000 -p 8001:8001 -p 8002:8002 trtis:latest trtserver --model-repository=s3://192.168.1.66:19002/models
+
+1. Test on Google 
+1. Target Jetson:
+1. Target Corel
 
 
 

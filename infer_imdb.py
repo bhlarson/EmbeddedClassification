@@ -40,23 +40,9 @@ parser.add_argument('--pre_trained_model', type=str,
                     help='Path to the pre-trained model checkpoint.')
 
 
-_NUM_CLASSES = 21
 _HEIGHT = 200
 _WIDTH = 200
 _DEPTH = 3
-_MIN_SCALE = 0.5
-_MAX_SCALE = 2.0
-_IGNORE_LABEL = 255
-
-_POWER = 0.9
-_MOMENTUM = 0.9
-
-_BATCH_NORM_DECAY = 0.9997
-
-_NUM_IMAGES = {
-    'train': 10582,
-    'validation': 1449,
-}
 
 
 def get_filenames(data_dir, ext):
@@ -107,7 +93,7 @@ def main(FLAGS):
         tfimg = tf.image.resize_with_crop_or_pad(tf.constant(img), _HEIGHT, _WIDTH)
         outputs = infer(tfimg)
 
-        #print('{}: pred_age {}, pred_gender {}, '.format(i, outputs['pred_age'].numpy()[0,0],outputs['pred_gender'].numpy()[0]))
+        print('{}: pred_age {}, pred_gender {}, '.format(i, outputs['pred_age'].numpy()[0,0],outputs['pred_gender'].numpy()[0]))
     analysis_done = datetime.datetime.now()
     total_time = (analysis_done-start_time).total_seconds()
 
@@ -128,6 +114,5 @@ if __name__ == '__main__':
         ptvsd.wait_for_attach()
         print("Debugger Attached")
 
-    FLAGS, unparsed = parser.parse_known_args()
     main(FLAGS)
     print('complete')

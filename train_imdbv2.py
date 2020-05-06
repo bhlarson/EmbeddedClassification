@@ -30,7 +30,7 @@ parser.add_argument('--model_dir', type=str, default='./model',
 parser.add_argument('--clean_model_dir', action='store_true',
                     help='Whether to clean up the model directory if present.')
 
-parser.add_argument('--train_epochs', type=int, default=1,
+parser.add_argument('--train_epochs', type=int, default=2,
                     help='Number of training epochs: '
                          'For 30K iteration with batch size 6, train_epoch = 17.01 (= 30K * 6 / 10,582). '
                          'For 30K iteration with batch size 8, train_epoch = 22.68 (= 30K * 8 / 10,582). '
@@ -45,7 +45,7 @@ parser.add_argument('--epochs_per_eval', type=int, default=1,
 parser.add_argument('--tensorboard_images_max_outputs', type=int, default=6,
                     help='Max number of batch elements to generate for Tensorboard.')
 
-parser.add_argument('--batch_size', type=int, default=16,
+parser.add_argument('--batch_size', type=int, default=24,
                     help='Number of examples per batch.')
 
 parser.add_argument('--learning_rate_policy', type=str, default='poly',
@@ -97,7 +97,7 @@ parser.add_argument('--resnet_size', type=int, default=101,
 
 parser.add_argument('--tbport', type=str, default='6006', help='Tensorboard network port.')
 
-parser.add_argument('--debug', type=bool, default=False, help='True, eanble debug and stop at breakpoint')
+parser.add_argument('--debug', type=bool, default=False, help='--debug True, eanble debug and stop at breakpoint')
 
 _NUM_CLASSES = 21
 _HEIGHT = 200

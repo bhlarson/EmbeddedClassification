@@ -5,8 +5,20 @@ import numpy as np
 from importlib import import_module
 from flask import Flask, render_template, Response
 from camera_opencv import Camera
+import argparse
+import tensorflow as tf
+
+parser = argparse.ArgumentParser()
+
+parser.add_argument('--debug', type=bool, default=False, help='Wait for debugge attach')
+
+parser.add_argument('--model', type=str, default='./saved_model/1588685015',
+                    help='Base directory for the model.')
 
 
+_HEIGHT = 200
+_WIDTH = 200
+_DEPTH = 3
 
 app = Flask(__name__)
 
@@ -19,20 +31,39 @@ def index():
 
 def gen(camera):
     """Video streaming generator function."""
+
+    loaded = tf.saved_model.load(FLAGS.model)
+    print(list(loaded.signatures.keys()))
+    infer = loaded.signatures["serving_default"]
+    print(infer.structured_outputs)
+    print (infer.inputs[0])
+
     while True:
         img = camera.get_frame()
         #img = cv2.flip(img, +1)
 
         imgShape = img.shape
-
-        '''color =  (0,255,0)
+        #Define crop of 2x CNN size and downsize it in tf.image.crop_and_resize
+        color =  (0,255,0)
         thickness =  3
         center = np.array([imgShape[1]/2, imgShape[0]/2])
-        d =  np.array([128,128])
+        d =  np.array([_HEIGHT,_WIDTH])
         p1 = tuple((center-d).astype(int))
         p2 = tuple((center+d).astype(int))
-        cv2.rectangle(img,p1,p2,color,thickness)'''
+        cv2.rectangle(img,p1,p2,color,thickness)
 
+        crop = cv2.resize(img[p1[1]:p2[1], p1[0]:p2[0]],(_WIDTH,_HEIGHT))
+
+        outputs = infer(tf.constant(crop))
+        gender = 'male'
+        if(outputs['pred_gender'].numpy()[0] < 1):
+            gender = 'female'
+        results = 'Age {}, Genderender {}, '.format(outputs['pred_age'].numpy()[0,0],outputs['pred_gender'].numpy()[0])
+        resultsDisplay = 'Age {}, Gender {}, '.format(int(round(outputs['pred_age'].numpy()[0,0])),gender)
+        
+        print(results)
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        cv2.putText(img, resultsDisplay, (10,25), font, 1, (0, 255, 0), 2, cv2.LINE_AA)
         # encode as a jpeg image and return it
         frame = cv2.imencode('.jpg', img)[1].tobytes()
 
@@ -48,4 +79,18 @@ def video_feed():
 
 
 if __name__ == '__main__':
+    FLAGS, unparsed = parser.parse_known_args()
+
+    if FLAGS.debug:
+        # https://code.visualstudio.com/docs/python/debugging#_remote-debugging
+        # Launch applicaiton on remote computer: 
+        # > python3 -m ptvsd --host 0.0.0.0 --port 3000 --wait predict_imdb.py
+        import ptvsd
+        # Allow other computers to attach to ptvsd at this IP address and port.
+        ptvsd.enable_attach(address=('0.0.0.0', 3000), redirect_output=True)
+        # Pause the program until a remote debugger is attached
+        print("Wait for debugger attach")
+        ptvsd.wait_for_attach()
+        print("Debugger Attached")
+
     app.run(host='0.0.0.0', threaded=True)

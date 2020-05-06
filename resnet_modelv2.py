@@ -209,7 +209,8 @@ def align_resnet_v2_generator(block_fn, layers, data_format=None):
     returns the output tensor of the ResNet model.
   """
   if data_format is None:
-    data_format = ('channels_first' if tf.test.is_built_with_cuda() else 'channels_last')
+    #data_format = ('channels_first' if tf.test.is_built_with_cuda() else 'channels_last')
+    data_format = 'channels_last'
 
   def model(inputs, is_training):
     """Constructs the ResNet model given the inputs."""
