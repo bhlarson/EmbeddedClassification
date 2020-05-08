@@ -2,17 +2,17 @@
 import os
 import cv2
 import numpy as np
-from importlib import import_module
 from flask import Flask, render_template, Response
 from camera_opencv import Camera
 import argparse
 import tensorflow as tf
+from datetime import datetime
 
 parser = argparse.ArgumentParser()
 
 parser.add_argument('--debug', type=bool, default=False, help='Wait for debugge attach')
 
-parser.add_argument('--model', type=str, default='./saved_model/1588685015',
+parser.add_argument('--model', type=str, default='./saved_model/1588771562',
                     help='Base directory for the model.')
 
 
@@ -52,15 +52,17 @@ def gen(camera):
         p2 = tuple((center+d).astype(int))
         cv2.rectangle(img,p1,p2,color,thickness)
 
+        before = datetime.now()
         crop = cv2.resize(img[p1[1]:p2[1], p1[0]:p2[0]],(_WIDTH,_HEIGHT))
-
         outputs = infer(tf.constant(crop))
         gender = 'male'
         if(outputs['pred_gender'].numpy()[0] < 1):
             gender = 'female'
         results = 'Age {}, Genderender {}, '.format(outputs['pred_age'].numpy()[0,0],outputs['pred_gender'].numpy()[0])
-        resultsDisplay = 'Age {}, Gender {}, '.format(int(round(outputs['pred_age'].numpy()[0,0])),gender)
-        
+        dt = datetime.now()-before
+
+        resultsDisplay = '{:.3f}s Age {}, Gender {}, '.format(dt.total_seconds(), int(round(outputs['pred_age'].numpy()[0,0])),gender)
+
         print(results)
         font = cv2.FONT_HERSHEY_SIMPLEX
         cv2.putText(img, resultsDisplay, (10,25), font, 1, (0, 255, 0), 2, cv2.LINE_AA)
@@ -92,5 +94,7 @@ if __name__ == '__main__':
         print("Wait for debugger attach")
         ptvsd.wait_for_attach()
         print("Debugger Attached")
+
+    print(tf.version)
 
     app.run(host='0.0.0.0', threaded=True)
