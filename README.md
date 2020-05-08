@@ -7,7 +7,10 @@ Dataset: https://data.vision.ee.ethz.ch/cvl/rrothe/imdb-wiki/
 1. Build docker image
 > docker build --rm -f dockerfile -t ec:latest context
 
-1. Run docker image
+1. Run development docker image
+   > docker run --gpus '"device=0"' -it --rm -v "$(pwd):/app" -v "/store:/store" -p 6006:6006/tcp -p 5000:5000/tcp -p 3000:3000 ec:latest
+
+1. Run runtime docker image
    > docker run --device=/dev/video0:/dev/video0 --gpus '"device=0"' -it --rm -v "$(pwd):/app" -v "/store:/store" -p 6006:6006/tcp -p 5000:5000/tcp -p 3000:3000 ec:latest
 
 1. In docker container, convert dataset into record:

@@ -86,7 +86,7 @@ parser.add_argument('--weight_decay', type=float, default=2e-4,
                     help='The weight decay to use for regularizing the model.')
 
 #parser.add_argument('--debug', action='store_true', help='Wait for debugge attach.')
-parser.add_argument('--debug', type=bool, default=True, help='Wait for debugge attach')
+parser.add_argument('--debug', type=bool, default=False, help='Wait for debugge attach')
 
 parser.add_argument('--resnet_size', type=int, default=101,
                     help='Resnet size (18, 34, 50, 101, 152, 200)')
@@ -132,7 +132,7 @@ _BATCH_NORM_DECAY = 0.9997
 
 def serving_input_receiver_fn():
     shape = [_HEIGHT, _WIDTH, _DEPTH]
-    image = tf.compat.v1.placeholder(dtype=tf.uint8, shape=shape, name='image')
+    image = tf.compat.v1.placeholder(dtype=tf.float32, shape=shape, name='image')
     images = tf.expand_dims(image, 0)
     return tf.estimator.export.TensorServingInputReceiver(images, image)
 
@@ -184,7 +184,7 @@ def main(unused_argv):
     tflite_model = converter.convert()
     open(FLAGS.tflitemodel+"model.tflite", "wb").write(tflite_model)
 
-  if True:
+  if False:
     # https://docs.nvidia.com/deeplearning/frameworks/tf-trt-user-guide/index.html
     from tensorflow.python.compiler.tensorrt import trt_convert
     output_saved_model_dir = FLAGS.savedmodel+'TRT'
