@@ -4,8 +4,8 @@ Resnet model trained on IMDB dataset to classify image age and gender
 
 Dataset: https://data.vision.ee.ethz.ch/cvl/rrothe/imdb-wiki/
 
-1. Build docker image
-> docker build --rm -f dockerfile -t ec:latest context
+1. Build development docker image
+> docker build --pull --rm -f "dockerfile" -t ecd:latest .
 
 1. Run development docker image
    > docker run --gpus '"device=0"' -it --rm -v "$(pwd):/app" -v "/store:/store" -p 6006:6006/tcp -p 5000:5000/tcp -p 3000:3000 ec:latest

@@ -5,8 +5,8 @@ LABEL maintainer="Brad Larson"
 #COPY fcn /app/fcn/
 #COPY Model_zoo /app/Model_zoo/
 
-RUN apt-get update
-RUN apt-get install -y libsm6 libxext6 libxrender-dev
+RUN apt get update
+RUN apt get install -y libsm6 libxext6 libxrender-dev
 RUN pip3 install --upgrade pip
 RUN pip3 --no-cache-dir install \
         opencv-python==4.2.0.34 \
