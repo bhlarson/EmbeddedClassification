@@ -26,9 +26,13 @@ Dataset: https://data.vision.ee.ethz.ch/cvl/rrothe/imdb-wiki/
    > docker run -it --rm --gpus device=0 --shm-size=1g --ulimit memlock=-1 --ulimit stack=67108864 -p 8000:8000 -p 8001:8001 -p 8002:8002 -v"/data/models/inference/trtis/lit:/models/lit" nvcr.io/nvidia/tritonserver:20.03-py3 trtserver --model-repository=/models
    > docker run -it --rm --gpus device=0 --shm-size=1g --ulimit memlock=-1 --ulimit stack=67108864 -p 8000:8000 -p 8001:8001 -p 8002:8002 trtis:latest trtserver --model-repository=s3://192.168.1.66:19002/models
 
-1. Test on Google 
 1. Target Jetson:
-1. Target Corel
+
+## Test on Google Corel Board:
+1. https://coral.ai/docs/dev-board/get-started/   
+
+
+
 
 
 
