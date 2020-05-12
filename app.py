@@ -47,9 +47,11 @@ def gen(camera):
         color =  (0,255,0)
         thickness =  3
         center = np.array([imgShape[1]/2, imgShape[0]/2])
-        d =  np.array([_HEIGHT,_WIDTH])
+        d =  np.array([_HEIGHT/2,_WIDTH/2])
         p1 = tuple((center-d).astype(int))
+        p1 = (max(p1[0],0),max(p1[1],0))
         p2 = tuple((center+d).astype(int))
+        p2 = (min(p2[0],imgShape[0]-1),min(p2[1],imgShape[1]-1))
         cv2.rectangle(img,p1,p2,color,thickness)
 
         before = datetime.now()
