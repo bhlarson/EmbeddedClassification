@@ -13,7 +13,7 @@ if False:
 
 import tensorflow as tf
 
-converter = tf.lite.TFLiteConverter.from_saved_model('./saved_model/1588860197')
+converter = tf.lite.TFLiteConverter.from_saved_model('./saved_model/1589461697')
 converter.optimizations = [tf.lite.Optimize.DEFAULT]
 tflite_model = converter.convert()
-open("./tflite/1588860197.tflite", "wb").write(tflite_model)
+open("./tflite/1589461697.tflite", "wb").write(tflite_model)

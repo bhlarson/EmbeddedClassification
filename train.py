@@ -1,29 +1,33 @@
-"""Train a DeepLab v3 model using tf.estimator API."""
+"""Train a Resnet model for age classification and gender regression from the imdb dataset."""
+#from __future__ import absolute_import
+#from __future__ import division
+#from __future__ import print_function
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 import argparse
 import os
 import sys
+import shutil
+import glob
 
 import tensorflow as tf
-import deeplab_model
-from utils import preprocessing
-from tensorflow.python import debug as tf_debug
 
-import shutil
+import resnet_modelv2 as resnet_model
+from tensorflow.python import debug as tf_debug
+from tensorboard import program
+
+print('Python Version {}'.format(sys.version))
+print('Tensorflow version {}'.format(tf.__version__))
+print('GPU Available: {}'.format(tf.test.is_gpu_available()))
+if(tf.test.is_gpu_available()):
+  print('GPU Devices: {}'.format(tf.test.gpu_device_name()))
 
 parser = argparse.ArgumentParser()
 
 parser.add_argument('--model_dir', type=str, default='./model',
                     help='Base directory for the model.')
 
-parser.add_argument('--clean_model_dir', action='store_true',
-                    help='Whether to clean up the model directory if present.')
-
-parser.add_argument('--train_epochs', type=int, default=1,
+parser.add_argument('--train_epochs', type=int, default=20,
                     help='Number of training epochs: '
                          'For 30K iteration with batch size 6, train_epoch = 17.01 (= 30K * 6 / 10,582). '
                          'For 30K iteration with batch size 8, train_epoch = 22.68 (= 30K * 8 / 10,582). '
@@ -38,7 +42,7 @@ parser.add_argument('--epochs_per_eval', type=int, default=1,
 parser.add_argument('--tensorboard_images_max_outputs', type=int, default=6,
                     help='Max number of batch elements to generate for Tensorboard.')
 
-parser.add_argument('--batch_size', type=int, default=2,
+parser.add_argument('--batch_size', type=int, default=24,
                     help='Number of examples per batch.')
 
 parser.add_argument('--learning_rate_policy', type=str, default='poly',
@@ -48,14 +52,19 @@ parser.add_argument('--learning_rate_policy', type=str, default='poly',
 parser.add_argument('--max_iter', type=int, default=30,
                     help='Number of maximum iteration used for "poly" learning rate policy.')
 
-parser.add_argument('--data_dir', type=str, default='./dataset/',
-                    help='Path to the directory containing the PASCAL VOC data tf record.')
+parser.add_argument('--data_dir', type=str, 
+                    default='/store/Datasets/imdb',
+                    #default='C:\\data\\datasets\\imdb',
+                    help='Path to the directory containing the imdb data tf record.')
 
 parser.add_argument('--base_architecture', type=str, default='resnet_v2_101',
                     choices=['resnet_v2_50', 'resnet_v2_101'],
                     help='The architecture of base Resnet building block.')
 
-parser.add_argument('--pre_trained_model', type=str, default='./trainings/resnet_v2_101_2017_04_14/resnet_v2_101.ckpt',
+# Pre-trained models: https://github.com/tensorflow/models/blob/master/research/slim/README.md
+parser.add_argument('--pre_trained_model', type=str, 
+                    default='/store/training/resnet_v2_101_2017_04_14/resnet_v2_101.ckpt',
+                    #default='C:\\data\\training\\resnet_v2_101_2017_04_14\\resnet_v2_101.ckpt',
                     help='Path to the pre-trained model checkpoint.')
 
 parser.add_argument('--output_stride', type=int, default=16,
@@ -77,12 +86,21 @@ parser.add_argument('--initial_global_step', type=int, default=0,
 parser.add_argument('--weight_decay', type=float, default=2e-4,
                     help='The weight decay to use for regularizing the model.')
 
-parser.add_argument('--debug', action='store_true',
+parser.add_argument('--debug_hooks', action='store_true',
                     help='Whether to use debugger to track down bad values during training.')
 
+parser.add_argument('--resnet_size', type=int, default=101,
+                    help='Resnet size (18, 34, 50, 101, 152, 200)')
+
+parser.add_argument('--tbport', type=str, default='6006', help='Tensorboard network port.')
+
+parser.add_argument('--clean_model_dir', action='store_true', help='If present, deletes the model directory when starting.')
+parser.add_argument('--saveonly', type=bool, default=True, help='True, enable debug and stop at breakpoint')
+parser.add_argument('--debug', type=bool, default=False, help='--debug True, eanble debug and stop at breakpoint')
+
 _NUM_CLASSES = 21
-_HEIGHT = 513
-_WIDTH = 513
+_HEIGHT = 200
+_WIDTH = 200
 _DEPTH = 3
 _MIN_SCALE = 0.5
 _MAX_SCALE = 2.0
@@ -110,66 +128,43 @@ def get_filenames(is_training, data_dir):
     A list of file names.
   """
   if is_training:
-    return [os.path.join(data_dir, 'voc_train.record')]
+    return glob.glob(os.path.join(data_dir, 'training-?????-of-?????.tfrecord'))
   else:
-    return [os.path.join(data_dir, 'voc_val.record')]
+    return glob.glob(os.path.join(data_dir, 'validation-?????-of-?????.tfrecord'))
 
 
 def parse_record(raw_record):
-  """Parse PASCAL image and label from a tf record."""
-  keys_to_features = {
-      'image/height':
-      tf.io.FixedLenFeature((), tf.int64),
-      'image/width':
-      tf.io.FixedLenFeature((), tf.int64),
-      'image/encoded':
-      tf.io.FixedLenFeature((), tf.string, default_value=''),
-      'image/format':
-      tf.io.FixedLenFeature((), tf.string, default_value='jpeg'),
-      'label/encoded':
-      tf.io.FixedLenFeature((), tf.string, default_value=''),
-      'label/format':
-      tf.io.FixedLenFeature((), tf.string, default_value='png'),
+  feature = {
+        'subject':  tf.io.FixedLenFeature((), tf.string, default_value=''),
+        'height':  tf.io.FixedLenFeature((), tf.int64),
+        'width':  tf.io.FixedLenFeature((), tf.int64),
+        'depth':  tf.io.FixedLenFeature((), tf.int64),
+        'gender': tf.io.FixedLenFeature((), tf.int64),
+        'age': tf.io.FixedLenFeature((), tf.float32),
+        'path': tf.io.FixedLenFeature((), tf.string, default_value=''),
+        'image': tf.io.FixedLenFeature((), tf.string, default_value=''),
   }
 
-  parsed = tf.io.parse_single_example(serialized=raw_record, features=keys_to_features)
+  parsed = tf.io.parse_single_example(serialized=raw_record, features=feature)
 
-  # height = tf.cast(parsed['image/height'], tf.int32)
-  # width = tf.cast(parsed['image/width'], tf.int32)
+  #image = tf.io.decode_raw(parsed['image'], tf.uint8)
+  image = tf.io.decode_jpeg(parsed['image'], _DEPTH)
+  #image_shape = tf.stack([parsed['height'], parsed['width'], _DEPTH])
+  #image = tf.reshape(image, image_shape)
+  #image.set_shape([_HEIGHT, _WIDTH, _DEPTH])
+  image = tf.image.resize_with_crop_or_pad(image, _HEIGHT, _WIDTH)
 
-  image = tf.image.decode_image(
-      tf.reshape(parsed['image/encoded'], shape=[]), _DEPTH)
-  image = tf.cast(tf.image.convert_image_dtype(image, dtype=tf.uint8), dtype=tf.float32)
-  image.set_shape([None, None, 3])
+  label = {
+    'name':parsed['subject'],
+    'gender':parsed['gender'],
+    'age':parsed['age']
+  }
 
-  label = tf.image.decode_image(
-      tf.reshape(parsed['label/encoded'], shape=[]), 1)
-  label = tf.cast(tf.image.convert_image_dtype(label, dtype=tf.uint8), dtype=tf.int32)
-  label.set_shape([None, None, 1])
 
   return image, label
 
 
 def preprocess_image(image, label, is_training):
-  """Preprocess a single image of layout [height, width, depth]."""
-  if is_training:
-    # Randomly scale the image and label.
-    image, label = preprocessing.random_rescale_image_and_label(
-        image, label, _MIN_SCALE, _MAX_SCALE)
-
-    # Randomly crop or pad a [_HEIGHT, _WIDTH] section of the image and label.
-    image, label = preprocessing.random_crop_or_pad_image_and_label(
-        image, label, _HEIGHT, _WIDTH, _IGNORE_LABEL)
-
-    # Randomly flip the image and label horizontally.
-    image, label = preprocessing.random_flip_left_right_image_and_label(
-        image, label)
-
-    image.set_shape([_HEIGHT, _WIDTH, 3])
-    label.set_shape([_HEIGHT, _WIDTH, 1])
-
-  image = preprocessing.mean_image_subtraction(image)
-
   return image, label
 
 
@@ -188,48 +183,48 @@ def input_fn(is_training, data_dir, batch_size, num_epochs=1):
   dataset = tf.data.Dataset.from_tensor_slices(get_filenames(is_training, data_dir))
   dataset = dataset.flat_map(tf.data.TFRecordDataset)
 
-  if is_training:
+  #if is_training:
     # When choosing shuffle buffer sizes, larger sizes result in better
     # randomness, while smaller sizes have better performance.
     # is a relatively small dataset, we choose to shuffle the full epoch.
-    dataset = dataset.shuffle(buffer_size=_NUM_IMAGES['train'])
+    #dataset = dataset.shuffle(buffer_size=_NUM_IMAGES['train'])
+
+  if is_training:
+
+    # When choosing shuffle buffer sizes, larger sizes result in better
+    # randomness, while smaller sizes have better performance.
+    # is a relatively small dataset, we choose to shuffle the full epoch.
+    dataset = dataset.shuffle(buffer_size=500)
+    # We call repeat after shuffling, rather than before, to prevent separate epochs from blending together.
+    dataset = dataset.repeat(num_epochs)
 
   dataset = dataset.map(parse_record)
-  dataset = dataset.map(
-      lambda image, label: preprocess_image(image, label, is_training))
+  dataset = dataset.map(lambda image, label: preprocess_image(image, label, is_training))
+  
+  dataset = dataset.batch(batch_size)
   dataset = dataset.prefetch(batch_size)
 
-  # We call repeat after shuffling, rather than before, to prevent separate
-  # epochs from blending together.
-  dataset = dataset.repeat(num_epochs)
-  dataset = dataset.batch(batch_size)
+  return dataset
 
-  iterator = tf.compat.v1.data.make_one_shot_iterator(dataset)
-  images, labels = iterator.get_next()
-
-  return images, labels
-
-def serving_input_fn():
-    shape = [_WIDTH, _HEIGHT, _DEPTH]
+'''def serving_input_fn():
+    shape = [_HEIGHT, _WIDTH, _DEPTH]
     features = {
-        "image" : tf.io.FixedLenFeature(shape=shape, dtype=tf.uint8),
+        "features" : tf.io.FixedLenFeature(shape=shape, dtype=tf.string),
     }
-    return tf.estimator.export.build_parsing_serving_input_receiver_fn(features)
+    return tf.estimator.export.build_parsing_serving_input_receiver_fn(features)'''
+
+def serving_input_receiver_fn():
+    shape = [_HEIGHT, _WIDTH, _DEPTH]
+    image = tf.compat.v1.placeholder(dtype=tf.uint8, shape=shape, name='image')
+    images = tf.expand_dims(image, 0)
+    return tf.estimator.export.TensorServingInputReceiver(images, image)
 
 def main(unused_argv):
-  # Using the Winograd non-fused algorithms provides a small performance boost.
-  os.environ['TF_ENABLE_WINOGRAD_NONFUSED'] = '1'
 
   if FLAGS.clean_model_dir:
     shutil.rmtree(FLAGS.model_dir, ignore_errors=True)
 
-  # Set up a RunConfig to only save checkpoints once per training cycle.
-  run_config = tf.estimator.RunConfig().replace(save_checkpoints_secs=1e9)
-  model = tf.estimator.Estimator(
-      model_fn=deeplab_model.deeplabv3_model_fn,
-      model_dir=FLAGS.model_dir,
-      config=run_config,
-      params={
+  params = {
           'output_stride': FLAGS.output_stride,
           'batch_size': FLAGS.batch_size,
           'base_architecture': FLAGS.base_architecture,
@@ -246,48 +241,90 @@ def main(unused_argv):
           'power': _POWER,
           'momentum': _MOMENTUM,
           'freeze_batch_norm': FLAGS.freeze_batch_norm,
-          'initial_global_step': FLAGS.initial_global_step
-      })
+          'initial_global_step': FLAGS.initial_global_step,
+          'resnet_size': FLAGS.resnet_size,
+          'kGender':50.0,
+          'kAge':1.0,
+          'learning_rate':1e-3,
+          'data_format':None,
+      }
 
-  for _ in range(FLAGS.train_epochs // FLAGS.epochs_per_eval):
-    tensors_to_log = {
-      'learning_rate': 'learning_rate',
-      'cross_entropy': 'cross_entropy',
-      'train_px_accuracy': 'train_px_accuracy',
-      'train_mean_iou': 'train_mean_iou',
-    }
+  # Launch tensorboard for training
+  # Remove http messages
+  tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+  tb = program.TensorBoard()
+  tb.configure(argv=[None, '--logdir', FLAGS.model_dir, "--port", FLAGS.tbport])
+  url = tb.launch()
+  print('TensorBoard at {}'.format(url))
 
-    logging_hook = tf.estimator.LoggingTensorHook(
-        tensors=tensors_to_log, every_n_iter=10)
-    train_hooks = [logging_hook]
-    eval_hooks = None
+  # Set up a RunConfig to only save checkpoints once per training cycle.
+  run_config = tf.estimator.RunConfig().replace(save_checkpoints_secs=1e9)
+  model = tf.estimator.Estimator(
+      model_fn=resnet_model.resnetv2_model_fn,
+      model_dir=FLAGS.model_dir,
+      config=run_config,
+      params=params)
 
-    if FLAGS.debug:
-      debug_hook = tf_debug.LocalCLIDebugHook()
-      train_hooks.append(debug_hook)
-      eval_hooks = [debug_hook]
+  if(FLAGS.saveonly != True):
+    for step in range(FLAGS.train_epochs // FLAGS.epochs_per_eval):
+      tensors_to_log = {
+        #'learning_rate': 'learning_rate',
+        #'cross_entropy': 'cross_entropy',
+        #'train_px_accuracy': 'train_px_accuracy',
+        #'train_mean_iou': 'train_mean_iou',
+      }
 
-    tf.compat.v1.logging.info("Start training.")
-    model.train(
-        input_fn=lambda: input_fn(True, FLAGS.data_dir, FLAGS.batch_size, FLAGS.epochs_per_eval),
-        hooks=train_hooks,
-        # steps=1  # For debug
-    )
+      logging_hook = tf.estimator.LoggingTensorHook(
+          tensors=tensors_to_log, every_n_iter=10)
+      train_hooks = [logging_hook]
+      eval_hooks = None
 
-    tf.compat.v1.logging.info("Start evaluation.")
-    # Evaluate the model and print results
-    eval_results = model.evaluate(
-        # Batch size must be 1 for testing because the images' size differs
-        input_fn=lambda: input_fn(False, FLAGS.data_dir, 1),
-        hooks=eval_hooks,
-        # steps=1  # For debug
-    )
-    print(eval_results)
+      if FLAGS.debug_hooks:
+        debug_hook = tf_debug.LocalCLIDebugHook()
+        train_hooks.append(debug_hook)
+        eval_hooks = [debug_hook]
 
-    model.export_saved_model('saved_model', serving_input_fn)
+      '''print("Start training.")
+      model.train(
+          input_fn=lambda: input_fn(True, FLAGS.data_dir, FLAGS.batch_size, FLAGS.epochs_per_eval),
+          hooks=train_hooks,
+          steps=100  # For debug
+      )
 
+      print("Start evaluation.")
+      # Evaluate the model and print results
+      eval_results = model.evaluate(
+          # Batch size must be 1 for testing because the images' size differs
+          input_fn=lambda: input_fn(False, FLAGS.data_dir, 1),
+          hooks=eval_hooks,
+          steps=1  # For debug
+      )
+      print(eval_results)'''
+
+      train_spec = tf.estimator.TrainSpec(input_fn=lambda: input_fn(True, FLAGS.data_dir, FLAGS.batch_size, FLAGS.epochs_per_eval) , max_steps=30000000)
+      #train_spec = tf.estimator.TrainSpec(input_fn=lambda: input_fn(True, FLAGS.data_dir, FLAGS.batch_size, FLAGS.epochs_per_eval))
+      eval_spec = tf.estimator.EvalSpec(input_fn=lambda: input_fn(False, FLAGS.data_dir, 1))
+
+      tf.estimator.train_and_evaluate(model, train_spec, eval_spec)
+
+  savedmodel = model.export_saved_model('saved_model', serving_input_receiver_fn, experimental_mode=tf.estimator.ModeKeys.PREDICT, as_text=True)
+  print('{} saved'.format(savedmodel.decode('utf-8'))) 
 
 if __name__ == '__main__':
-  tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.INFO)
   FLAGS, unparsed = parser.parse_known_args()
-  tf.compat.v1.app.run(main=main, argv=[sys.argv[0]] + unparsed)
+
+  if FLAGS.debug:
+      print("Wait for debugger attach")
+      import ptvsd
+      # https://code.visualstudio.com/docs/python/debugging#_remote-debugging
+      # Launch applicaiton on remote computer: 
+      # > python3 -m ptvsd --host 10.150.41.30 --port 3000 --wait fcn/train.py
+      # Allow other computers to attach to ptvsd at this IP address and port.
+      ptvsd.enable_attach(address=('0.0.0.0', 3000), redirect_output=True)
+      # Pause the program until a remote debugger is attached
+
+      ptvsd.wait_for_attach()
+
+      print("Debugger attach")
+
+  main(unparsed)
