@@ -13,18 +13,23 @@ import glob
 import cv2
 import numpy as np
 import datetime
-import tflite_runtime.interpreter as tflite
+
+USE_TFL = False
+if USE_TFL:
+    import tflite_runtime.interpreter as tflite
+else:
+    import tensorflow as tf
 
 print('Python Version {}'.format(sys.version))
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument('--debug', type=bool, default=True, help='Wait for debugger attach')
-parser.add_argument('--model', type=str, default='./tflite/1588860197.tflite', help='Model path')
+parser.add_argument('--debug', action='store_true', help='Wait for debugger attach')
+parser.add_argument('--model', type=str, default='./tflite/1589806577_int8.tflite', help='Model path')
 
 parser.add_argument('--data_dir', type=str, 
-                    default='/home/mendel/data/imdb',
-                    #default='C:\\data\\datasets\\imdb',
+                    #default='/home/mendel/data/imdb',
+                    default='/store/Datasets/imdb/imdb_crop/18',
                     help='Path to the directory containing the imdb data tf record.')
 
 parser.add_argument('--match', type=str, default='*',
@@ -64,7 +69,11 @@ def build_engine(FLAGS):
 
 def main(FLAGS):
 
-    interpreter = tflite.Interpreter(model_path=FLAGS.model)
+    if USE_TFL:
+        interpreter = tflite.Interpreter(model_path=FLAGS.model)
+    else:
+        interpreter = tf.lite.Interpreter(model_path=FLAGS.model)
+    
     interpreter.allocate_tensors()
     # Get input and output tensors.
     input_details = interpreter.get_input_details()
@@ -120,7 +129,7 @@ def main(FLAGS):
         if(interpreter.get_tensor(output_details[1]['index'])[0] < 1):
             gender = 'female'
 
-        print('{}:{}, {}:{}'.format(output_details[0]['name'], age, output_details[1]['name'],gender))
+        print('{}:{}, {}:{} file {}'.format(output_details[0]['name'], age, output_details[1]['name'],gender, imfile))
 
     analysis_done = datetime.datetime.now()
     total_time = (analysis_done-start_time).total_seconds()

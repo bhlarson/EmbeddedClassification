@@ -63,7 +63,7 @@ parser.add_argument('--base_architecture', type=str, default='resnet_v2_101',
 
 # Pre-trained models: https://github.com/tensorflow/models/blob/master/research/slim/README.md
 parser.add_argument('--pre_trained_model', type=str, 
-                    default='/store/training/resnet_v2_101_2017_04_14/resnet_v2_101.ckpt',
+                    #default='/store/training/resnet_v2_101_2017_04_14/resnet_v2_101.ckpt',
                     #default='C:\\data\\training\\resnet_v2_101_2017_04_14\\resnet_v2_101.ckpt',
                     help='Path to the pre-trained model checkpoint.')
 
@@ -215,7 +215,7 @@ def input_fn(is_training, data_dir, batch_size, num_epochs=1):
 
 def serving_input_receiver_fn():
     shape = [_HEIGHT, _WIDTH, _DEPTH]
-    image = tf.compat.v1.placeholder(dtype=tf.uint8, shape=shape, name='image')
+    image = tf.compat.v1.placeholder(dtype=tf.float32, shape=shape, name='input_image')
     images = tf.expand_dims(image, 0)
     return tf.estimator.export.TensorServingInputReceiver(images, image)
 
@@ -249,14 +249,6 @@ def main(unused_argv):
           'data_format':None,
       }
 
-  # Launch tensorboard for training
-  # Remove http messages
-  tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
-  tb = program.TensorBoard()
-  tb.configure(argv=[None, '--logdir', FLAGS.model_dir, "--port", FLAGS.tbport])
-  url = tb.launch()
-  print('TensorBoard at {}'.format(url))
-
   # Set up a RunConfig to only save checkpoints once per training cycle.
   run_config = tf.estimator.RunConfig().replace(save_checkpoints_secs=1e9)
   model = tf.estimator.Estimator(
@@ -266,6 +258,15 @@ def main(unused_argv):
       params=params)
 
   if(FLAGS.saveonly != True):
+    # Launch tensorboard for training
+    # Remove http messages
+
+    tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+    tb = program.TensorBoard()
+    tb.configure(argv=[None, '--logdir', FLAGS.model_dir, "--port", FLAGS.tbport])
+    url = tb.launch()
+    print('TensorBoard at {}'.format(url))
+
     for step in range(FLAGS.train_epochs // FLAGS.epochs_per_eval):
       tensors_to_log = {
         #'learning_rate': 'learning_rate',

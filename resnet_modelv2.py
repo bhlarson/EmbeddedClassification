@@ -21,10 +21,10 @@ def batch_norm_relu(inputs, is_training, data_format):
   """Performs a batch normalization followed by a ReLU."""
   # We set fused=True for a significant performance boost. See
   # https://www.tensorflow.org/performance/performance_guide#common_fused_ops
-  inputs = tf.compat.v1.layers.batch_normalization(
-      inputs=inputs, axis=1 if data_format == 'channels_first' else 3,
-      momentum=_BATCH_NORM_DECAY, epsilon=_BATCH_NORM_EPSILON, center=True,
-      scale=True, training=is_training, fused=True)
+  #inputs = tf.compat.v1.layers.batch_normalization(
+  #    inputs=inputs, axis=1 if data_format == 'channels_first' else 3,
+  #    momentum=_BATCH_NORM_DECAY, epsilon=_BATCH_NORM_EPSILON, center=True,
+  #    scale=True, training=is_training, fused=True)
   inputs = tf.nn.relu(inputs)
   return inputs
 
@@ -283,8 +283,8 @@ def resnetv2_model_fn(features, labels, mode, params):
   features = tf.identity(features, 'features')
   network = resnet_v2(params['resnet_size'])
 
-  images = tf.cast(features,tf.float32)
-  images = tf.image.per_image_standardization(images)
+  images = (tf.cast(features,tf.float32)-128.0)/256
+  #images = tf.image.per_image_standardization(images)
 
   #final = network(inputs=images, is_training= (mode==tf.estimator.ModeKeys.TRAIN) )
   final = network(inputs=images, is_training= True )
@@ -318,7 +318,7 @@ def resnetv2_model_fn(features, labels, mode, params):
   #tf.summary.scalar('label_gender', labels['gender'])
   #tf.summary.scalar('pred_gender', pred_gender)
 
-  sum_image = tf.compat.v1.summary.image("image", features, max_outputs=6)
+  sum_image = tf.compat.v1.summary.image("summaryimage", features, max_outputs=6)
 
   predictions['label_gender'] = labels['gender']
   predictions['label_age'] = labels['age']

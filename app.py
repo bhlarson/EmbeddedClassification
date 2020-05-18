@@ -10,9 +10,8 @@ from datetime import datetime
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument('--debug', type=bool, default=False, help='Wait for debugge attach')
-
-parser.add_argument('--model', type=str, default='./saved_model/1588771562',
+parser.add_argument('--debug', action='store_true',help='Wait for debugge attach')
+parser.add_argument('--model', type=str, default='./saved_model/1589461697',
                     help='Base directory for the model.')
 
 
