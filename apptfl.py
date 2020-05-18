@@ -5,16 +5,21 @@ import numpy as np
 from flask import Flask, render_template, Response
 from camera_opencv import Camera
 import argparse
-import tensorflow as tf
+import tflite_runtime.interpreter as tflite
+import platform
 from datetime import datetime
 
 parser = argparse.ArgumentParser()
 
 parser.add_argument('--debug', action='store_true',help='Wait for debugge attach')
-
-
 parser.add_argument('--model', type=str, default='./tflite/1589546315.tflite',
                     help='Base directory for the model.')
+
+EDGETPU_SHARED_LIB = {
+  'Linux': 'libedgetpu.so.1',
+  'Darwin': 'libedgetpu.1.dylib',
+  'Windows': 'edgetpu.dll'
+}[platform.system()]
 
 
 _HEIGHT = 200
@@ -33,10 +38,8 @@ def index():
 def gen(camera):
     """Video streaming generator function."""
     # Load TFLite model and allocate tensors.
-    interpreter = tf.lite.Interpreter(model_path=FLAGS.model, experimental_delegates=[
-          tf.lite.experimental.load_delegate(EDGETPU_SHARED_LIB, {'device': device[0]} if device else {})
-          #tf.lite.experimental.load_delegate(NNAPI_SHARED_LIB, {'device': device[0]} if device else {})
-      ])
+    #interpreter = tflite.Interpreter(FLAGS.model, experimental_delegates=[tflite.load_delegate('libedgetpu.so.1')])
+    interpreter = tflite.Interpreter(FLAGS.model)
     interpreter.allocate_tensors()
 
     # Get input and output tensors.
@@ -107,7 +110,5 @@ if __name__ == '__main__':
         print("Wait for debugger attach")
         ptvsd.wait_for_attach()
         print("Debugger Attached")
-
-    print(tf.version)
 
     app.run(host='0.0.0.0', threaded=True)
