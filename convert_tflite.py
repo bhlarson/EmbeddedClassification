@@ -57,6 +57,10 @@ def main(FLAGS):
     converter.inference_output_type = tf.int8  # or tf.uint8
     tflite_model = converter.convert()
     open("./tflite/1589806577_int8.tflite", "wb").write(tflite_model)
+    stream = os.popen('edgetpu_compiler ./tflite/1589806577_int8.tflite -o ./etpu')
+    compileout = stream.read()
+    print(compileout)
+    
 
 if __name__ == '__main__':
     FLAGS, unparsed = parser.parse_known_args()

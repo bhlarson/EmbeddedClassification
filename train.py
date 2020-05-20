@@ -95,8 +95,8 @@ parser.add_argument('--resnet_size', type=int, default=101,
 parser.add_argument('--tbport', type=str, default='6006', help='Tensorboard network port.')
 
 parser.add_argument('--clean_model_dir', action='store_true', help='If present, deletes the model directory when starting.')
-parser.add_argument('--saveonly', type=bool, default=True, help='True, enable debug and stop at breakpoint')
-parser.add_argument('--debug', type=bool, default=False, help='--debug True, eanble debug and stop at breakpoint')
+parser.add_argument('--saveonly', type=bool, default=False, help='True, enable debug and stop at breakpoint')
+parser.add_argument('--debug', action='store_true',help='Wait for debugge attach')
 
 _NUM_CLASSES = 21
 _HEIGHT = 200

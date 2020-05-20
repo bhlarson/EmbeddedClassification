@@ -5,8 +5,12 @@ LABEL maintainer="Brad Larson"
 #COPY fcn /app/fcn/
 #COPY Model_zoo /app/Model_zoo/
 
-RUN apt get update
-RUN apt get install -y libsm6 libxext6 libxrender-dev
+RUN curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
+RUN echo "deb https://packages.cloud.google.com/apt coral-edgetpu-stable main" | tee /etc/apt/sources.list.d/coral-edgetpu.list
+
+RUN apt-get update
+RUN apt-get install -y libsm6 libxext6 libxrender-dev
+RUN apt-get install -y edgetpu-compiler
 RUN pip3 install --upgrade pip
 RUN pip3 --no-cache-dir install \
         opencv-python==4.2.0.34 \
