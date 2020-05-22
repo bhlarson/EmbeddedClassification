@@ -12,8 +12,10 @@ from datetime import datetime
 parser = argparse.ArgumentParser()
 
 parser.add_argument('--debug', action='store_true',help='Wait for debugge attach')
-parser.add_argument('--model', type=str, default='./tflite/1589546315.tflite',
-                    help='Base directory for the model.')
+parser.add_argument('--model', 
+                    #type=str, default='./tflite/1589806577_int8.tflite',
+                    type=str, default='./etpu/1589806577_int8_edgetpu.tflite',
+                    help='Path to model')
 
 EDGETPU_SHARED_LIB = {
   'Linux': 'libedgetpu.so.1',
@@ -38,8 +40,8 @@ def index():
 def gen(camera):
     """Video streaming generator function."""
     # Load TFLite model and allocate tensors.
-    #interpreter = tflite.Interpreter(FLAGS.model, experimental_delegates=[tflite.load_delegate('libedgetpu.so.1')])
-    interpreter = tflite.Interpreter(FLAGS.model)
+    interpreter = tflite.Interpreter(FLAGS.model, experimental_delegates=[tflite.load_delegate('libedgetpu.so.1')])
+    #interpreter = tflite.Interpreter(FLAGS.model)
     interpreter.allocate_tensors()
 
     # Get input and output tensors.

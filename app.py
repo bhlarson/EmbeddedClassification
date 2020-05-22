@@ -57,6 +57,10 @@ def gen(camera):
         crop = cv2.resize(img[p1[1]:p2[1], p1[0]:p2[0]],(_WIDTH,_HEIGHT))
         outputs = infer(tf.constant(crop))
         gender = 'male'
+        pred_gender = np.squeeze(outputs['pred_gender'].numpy())
+        pred_age = np.squeeze(outputs['pred_age'].numpy())
+        
+        outputs['pred_age'].numpy()
         if(outputs['pred_gender'].numpy()[0] < 1):
             gender = 'female'
         results = 'Age {}, Genderender {}, '.format(outputs['pred_age'].numpy()[0,0],outputs['pred_gender'].numpy()[0])
