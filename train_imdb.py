@@ -28,10 +28,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--model_dir', type=str, default='./model',
                     help='Base directory for the model.')
 
-parser.add_argument('--clean_model_dir', action='store_true',
-                    help='Whether to clean up the model directory if present.')
-
-parser.add_argument('--train_epochs', type=int, default=2,
+parser.add_argument('--train_epochs', type=int, default=20,
                     help='Number of training epochs: '
                          'For 30K iteration with batch size 6, train_epoch = 17.01 (= 30K * 6 / 10,582). '
                          'For 30K iteration with batch size 8, train_epoch = 22.68 (= 30K * 8 / 10,582). '
@@ -46,7 +43,7 @@ parser.add_argument('--epochs_per_eval', type=int, default=1,
 parser.add_argument('--tensorboard_images_max_outputs', type=int, default=6,
                     help='Max number of batch elements to generate for Tensorboard.')
 
-parser.add_argument('--batch_size', type=int, default=16,
+parser.add_argument('--batch_size', type=int, default=32,
                     help='Number of examples per batch.')
 
 parser.add_argument('--learning_rate_policy', type=str, default='poly',
@@ -78,7 +75,7 @@ parser.add_argument('--output_stride', type=int, default=16,
 parser.add_argument('--freeze_batch_norm', action='store_true',
                     help='Freeze batch normalization parameters during the training.')
 
-parser.add_argument('--initial_learning_rate', type=float, default=7e-3,
+parser.add_argument('--initial_learning_rate', type=float, default=1e-4,
                     help='Initial learning rate for the optimizer.')
 
 parser.add_argument('--end_learning_rate', type=float, default=1e-6,
@@ -93,10 +90,14 @@ parser.add_argument('--weight_decay', type=float, default=2e-4,
 parser.add_argument('--debug_hooks', action='store_true',
                     help='Whether to use debugger to track down bad values during training.')
 
-parser.add_argument('--resnet_size', type=int, default=101,
+parser.add_argument('--resnet_size', type=int, default=18,
                     help='Resnet size (18, 34, 50, 101, 152, 200)')
 
-parser.add_argument('--debug', type=bool, default=False, help='True, eanble debug and stop at breakpoint')
+parser.add_argument('--tbport', type=str, default='6006', help='Tensorboard network port.')
+
+parser.add_argument('--clean_model_dir', action='store_true', help='If present, deletes the model directory when starting.')
+parser.add_argument('--saveonly', action='store_true', help='True, enable debug and stop at breakpoint')
+parser.add_argument('--debug', action='store_true',help='Wait for debugge attach')
 
 _NUM_CLASSES = 21
 _HEIGHT = 200
@@ -145,7 +146,7 @@ def parse_record(raw_record):
         'image': tf.FixedLenFeature((), tf.string, default_value=''),
   }
 
-  parsed = tf.parse_single_example(raw_record, feature)
+  parsed = tf.parse_single_example(serialized=raw_record, features=feature)
 
   #image = tf.io.decode_raw(parsed['image'], tf.uint8)
   image = tf.io.decode_jpeg(parsed['image'], _DEPTH)
@@ -225,12 +226,18 @@ def input_fn(is_training, data_dir, batch_size, num_epochs=1):
 
   return dataset
 
-def serving_input_fn():
+'''def serving_input_fn():
     shape = [_HEIGHT, _WIDTH, _DEPTH]
     features = {
         "features" : tf.FixedLenFeature(shape=shape, dtype=tf.string),
     }
-    return tf.estimator.export.build_parsing_serving_input_receiver_fn(features)
+    return tf.estimator.export.build_parsing_serving_input_receiver_fn(features)'''
+
+def serving_input_receiver_fn():
+    shape = [_HEIGHT, _WIDTH, _DEPTH]
+    image = tf.placeholder(dtype=tf.float32, shape=shape, name='input_image')
+    images = tf.expand_dims(image, 0)
+    return tf.estimator.export.TensorServingInputReceiver(images, image)
 
 def main(unused_argv):
 
@@ -258,17 +265,9 @@ def main(unused_argv):
           'resnet_size': FLAGS.resnet_size,
           'kGender':50.0,
           'kAge':1.0,
-          'learning_rate':1e-3,
+          'learning_rate':FLAGS.initial_learning_rate,
           'data_format':None,
       }
-
-  # Launch tensorboard for training
-  # Remove http messages
-  tf.logging.set_verbosity(tf.compat.v1.logging.ERROR)
-  tb = program.TensorBoard()
-  tb.configure(argv=[None, '--logdir', FLAGS.model_dir])
-  url = tb.launch()
-  print('TensorBoard at {}'.format(url))
 
   # Set up a RunConfig to only save checkpoints once per training cycle.
   run_config = tf.estimator.RunConfig().replace(save_checkpoints_secs=1e9)
@@ -278,50 +277,59 @@ def main(unused_argv):
       config=run_config,
       params=params)
 
-  for step in range(FLAGS.train_epochs // FLAGS.epochs_per_eval):
-    tensors_to_log = {
-      #'learning_rate': 'learning_rate',
-      #'cross_entropy': 'cross_entropy',
-      #'train_px_accuracy': 'train_px_accuracy',
-      #'train_mean_iou': 'train_mean_iou',
-    }
+  if(FLAGS.saveonly != True):
+    # Launch tensorboard for training
+    # Remove http messages
+    tf.logging.set_verbosity(tf.logging.ERROR)
+    tb = program.TensorBoard()
+    tb.configure(argv=[None, '--logdir', FLAGS.model_dir, '--port', str(FLAGS.tbport)])
+    url = tb.launch()
+    print('TensorBoard at {}'.format(url))
 
-    logging_hook = tf.train.LoggingTensorHook(
-        tensors=tensors_to_log, every_n_iter=10)
-    train_hooks = [logging_hook]
-    eval_hooks = None
+    for step in range(FLAGS.train_epochs // FLAGS.epochs_per_eval):
+      tensors_to_log = {
+        #'learning_rate': 'learning_rate',
+        #'cross_entropy': 'cross_entropy',
+        #'train_px_accuracy': 'train_px_accuracy',
+        #'train_mean_iou': 'train_mean_iou',
+      }
 
-    if FLAGS.debug_hooks:
-      debug_hook = tf_debug.LocalCLIDebugHook()
-      train_hooks.append(debug_hook)
-      eval_hooks = [debug_hook]
+      logging_hook = tf.train.LoggingTensorHook(
+          tensors=tensors_to_log, every_n_iter=10)
+      train_hooks = [logging_hook]
+      eval_hooks = None
 
-    '''print("Start training.")
-    model.train(
-        input_fn=lambda: input_fn(True, FLAGS.data_dir, FLAGS.batch_size, FLAGS.epochs_per_eval),
-        hooks=train_hooks,
-        steps=100  # For debug
-    )
+      if FLAGS.debug_hooks:
+        debug_hook = tf_debug.LocalCLIDebugHook()
+        train_hooks.append(debug_hook)
+        eval_hooks = [debug_hook]
 
-    print("Start evaluation.")
-    # Evaluate the model and print results
-    eval_results = model.evaluate(
-        # Batch size must be 1 for testing because the images' size differs
-        input_fn=lambda: input_fn(False, FLAGS.data_dir, 1),
-        hooks=eval_hooks,
-        steps=1  # For debug
-    )
-    print(eval_results)'''
+      '''print("Start training.")
+      model.train(
+          input_fn=lambda: input_fn(True, FLAGS.data_dir, FLAGS.batch_size, FLAGS.epochs_per_eval),
+          hooks=train_hooks,
+          steps=100  # For debug
+      )
 
-    train_spec = tf.estimator.TrainSpec(input_fn=lambda: input_fn(True, FLAGS.data_dir, FLAGS.batch_size, FLAGS.epochs_per_eval) , max_steps=30000000)
-    #train_spec = tf.estimator.TrainSpec(input_fn=lambda: input_fn(True, FLAGS.data_dir, FLAGS.batch_size, FLAGS.epochs_per_eval))
-    eval_spec = tf.estimator.EvalSpec(input_fn=lambda: input_fn(False, FLAGS.data_dir, 1))
+      print("Start evaluation.")
+      # Evaluate the model and print results
+      eval_results = model.evaluate(
+          # Batch size must be 1 for testing because the images' size differs
+          input_fn=lambda: input_fn(False, FLAGS.data_dir, 1),
+          hooks=eval_hooks,
+          steps=1  # For debug
+      )
+      print(eval_results)'''
 
-    tf.estimator.train_and_evaluate(model, train_spec, eval_spec)
+      train_spec = tf.estimator.TrainSpec(input_fn=lambda: input_fn(True, FLAGS.data_dir, FLAGS.batch_size, FLAGS.epochs_per_eval) , max_steps=30000000)
+      #train_spec = tf.estimator.TrainSpec(input_fn=lambda: input_fn(True, FLAGS.data_dir, FLAGS.batch_size, FLAGS.epochs_per_eval))
+      eval_spec = tf.estimator.EvalSpec(input_fn=lambda: input_fn(False, FLAGS.data_dir, 1))
 
-  model.export_saved_model('saved_model', serving_input_fn())
+      tf.estimator.train_and_evaluate(model, train_spec, eval_spec)
 
-print('complete')
+  #savedmodel = model.export_saved_model('saved_model', serving_input_fn())
+  savedmodel = model.export_saved_model('saved_model', serving_input_receiver_fn, experimental_mode=tf.estimator.ModeKeys.PREDICT, as_text=True)
+  print('{} saved'.format(savedmodel.decode('utf-8'))) 
 
 if __name__ == '__main__':
   FLAGS, unparsed = parser.parse_known_args()
@@ -340,4 +348,4 @@ if __name__ == '__main__':
 
       print("Debugger attach")
 
-  tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)
+  main(unparsed)

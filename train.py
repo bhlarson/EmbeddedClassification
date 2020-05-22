@@ -89,7 +89,7 @@ parser.add_argument('--weight_decay', type=float, default=2e-4,
 parser.add_argument('--debug_hooks', action='store_true',
                     help='Whether to use debugger to track down bad values during training.')
 
-parser.add_argument('--resnet_size', type=int, default=101,
+parser.add_argument('--resnet_size', type=int, default=18,
                     help='Resnet size (18, 34, 50, 101, 152, 200)')
 
 parser.add_argument('--tbport', type=str, default='6006', help='Tensorboard network port.')
@@ -260,10 +260,9 @@ def main(unused_argv):
   if(FLAGS.saveonly != True):
     # Launch tensorboard for training
     # Remove http messages
-
     tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
     tb = program.TensorBoard()
-    tb.configure(argv=[None, '--logdir', FLAGS.model_dir, "--port", FLAGS.tbport])
+    tb.configure(argv=[None, '--logdir', FLAGS.model_dir, '--port', str(FLAGS.tbport), '--bind_all'])
     url = tb.launch()
     print('TensorBoard at {}'.format(url))
 

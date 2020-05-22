@@ -1,9 +1,12 @@
-FROM tensorflow/tensorflow:2.1.0-gpu-py3
+#FROM tensorflow/tensorflow:2.1.0-gpu-py3
+FROM tensorflow/tensorflow:1.15.0-gpu-py3
 
 LABEL maintainer="Brad Larson"
 #COPY README.md /app/README.md
 #COPY fcn /app/fcn/
 #COPY Model_zoo /app/Model_zoo/
+
+RUN echo 'alias py=python' >> ~/.bashrc
 
 RUN curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
 RUN echo "deb https://packages.cloud.google.com/apt coral-edgetpu-stable main" | tee /etc/apt/sources.list.d/coral-edgetpu.list

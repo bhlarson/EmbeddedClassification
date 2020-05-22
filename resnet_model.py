@@ -21,11 +21,11 @@ def batch_norm_relu(inputs, is_training, data_format):
   """Performs a batch normalization followed by a ReLU."""
   # We set fused=True for a significant performance boost. See
   # https://www.tensorflow.org/performance/performance_guide#common_fused_ops
-  inputs = tf.layers.batch_normalization(
-      inputs=inputs, axis=1 if data_format == 'channels_first' else 3,
-      momentum=_BATCH_NORM_DECAY, epsilon=_BATCH_NORM_EPSILON, center=True,
-      scale=True, training=is_training, fused=True)
-  inputs = tf.nn.relu(inputs)
+  #inputs = tf.layers.batch_normalization(
+  #    inputs=inputs, axis=1 if data_format == 'channels_first' else 3,
+  #    momentum=_BATCH_NORM_DECAY, epsilon=_BATCH_NORM_EPSILON, center=True,
+  #    scale=True, training=is_training, fused=True)
+  #inputs = tf.nn.relu(inputs)
   return inputs
 
 
@@ -209,7 +209,8 @@ def align_resnet_v2_generator(block_fn, layers, data_format=None):
     returns the output tensor of the ResNet model.
   """
   if data_format is None:
-    data_format = ('channels_first' if tf.test.is_built_with_cuda() else 'channels_last')
+    #data_format = ('channels_first' if tf.test.is_built_with_cuda() else 'channels_last')
+    data_format = 'channels_last'
 
   def model(inputs, is_training):
     """Constructs the ResNet model given the inputs."""
@@ -281,8 +282,8 @@ def resnetv2_model_fn(features, labels, mode, params):
   features = tf.identity(features, 'features')
   network = resnet_v2(params['resnet_size'])
 
-  images = tf.cast(features,tf.float32)
-  images = tf.image.per_image_standardization(images)
+  images = (tf.cast(features,tf.float32)-128.0)/256
+  #images = tf.image.per_image_standardization(images)
 
   #final = network(inputs=images, is_training= (mode==tf.estimator.ModeKeys.TRAIN) )
   final = network(inputs=images, is_training= True )
@@ -332,7 +333,8 @@ def resnetv2_model_fn(features, labels, mode, params):
   tf.summary.scalar('classification_cross_entropy', cross_entropy)
 
   # Regression loss
-  loss_mse = tf.losses.mean_squared_error(tf.expand_dims(labels['age'],1), pred_age)
+  loss_mse = tf.losses.absolute_difference(tf.expand_dims(labels['age'],1), pred_age)
+  #loss_mse = tf.losses.mean_squared_error(tf.expand_dims(labels['age'],1), pred_age)
 
   # Create a tensor named cross_entropy for logging purposes.
   tf.identity(loss_mse, name='regression_mse')
@@ -355,7 +357,7 @@ def resnetv2_model_fn(features, labels, mode, params):
   age_pred_mean = tf.metrics.mean(pred_age)
   gender_pred_mean = tf.metrics.mean(pred_gender)
 
-  mean_squared_error_age = tf.metrics.mean_squared_error(labels['age'], pred_age )
+  mean_error_age = tf.metrics.mean_absolute_error(labels['age'], pred_age )
   accuracy_gender = tf.metrics.accuracy( labels['gender'], pred_gender)
   mean_iou = tf.metrics.mean_iou(labels['gender'], pred_gender, params['num_classes'])
 
@@ -364,7 +366,7 @@ def resnetv2_model_fn(features, labels, mode, params):
                'age_pred_mean':age_pred_mean, 
                'gender_mean':gender_mean, 
                'gender_pred_mean':gender_pred_mean, 
-               'mean_squared_error_age': mean_squared_error_age, 
+               'mean_error_age': mean_error_age, 
                'accuracy_gender': accuracy_gender,
                'mean_iou_gender': mean_iou,
               }
