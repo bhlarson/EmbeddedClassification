@@ -11,7 +11,7 @@ from datetime import datetime
 parser = argparse.ArgumentParser()
 
 parser.add_argument('--debug', action='store_true',help='Wait for debugge attach')
-parser.add_argument('--model', type=str, default='./saved_model/1589461697',
+parser.add_argument('--model', type=str, default='./saved_model/1590410988',
                     help='Base directory for the model.')
 
 
@@ -31,7 +31,8 @@ def index():
 def gen(camera):
     """Video streaming generator function."""
 
-    loaded = tf.saved_model.load(FLAGS.model)
+    loaded = tf.saved_model.load_v2(FLAGS.model)
+    #loaded = tf.saved_model.load(FLAGS.model)
     print(list(loaded.signatures.keys()))
     infer = loaded.signatures["serving_default"]
     print(infer.structured_outputs)

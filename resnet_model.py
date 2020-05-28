@@ -282,7 +282,7 @@ def resnetv2_model_fn(features, labels, mode, params):
   features = tf.identity(features, 'features')
   network = resnet_v2(params['resnet_size'])
 
-  images = (tf.cast(features,tf.float32)-128.0)/256
+  images = tf.cast(features,tf.float32)-128.0
   #images = tf.image.per_image_standardization(images)
 
   #final = network(inputs=images, is_training= (mode==tf.estimator.ModeKeys.TRAIN) )
@@ -300,9 +300,7 @@ def resnetv2_model_fn(features, labels, mode, params):
 
   predictions = {
       'pred_age': pred_age,
-      'pred_gender': pred_gender,
-      'logits_gender': logits_gender,
-      'image':features,
+      'pred_gender': pred_gender
   }
 
   if mode == tf.estimator.ModeKeys.PREDICT:
@@ -333,16 +331,16 @@ def resnetv2_model_fn(features, labels, mode, params):
   tf.summary.scalar('classification_cross_entropy', cross_entropy)
 
   # Regression loss
-  loss_mse = tf.losses.absolute_difference(tf.expand_dims(labels['age'],1), pred_age)
-  #loss_mse = tf.losses.mean_squared_error(tf.expand_dims(labels['age'],1), pred_age)
+  err_age = tf.losses.absolute_difference(tf.expand_dims(labels['age'],1), pred_age)
+  #err_age = tf.losses.mean_squared_error(tf.expand_dims(labels['age'],1), pred_age)
 
   # Create a tensor named cross_entropy for logging purposes.
-  tf.identity(loss_mse, name='regression_mse')
-  tf.summary.scalar('regression_mse', loss_mse)
+  tf.identity(err_age, name='err_age')
+  tf.summary.scalar('err_age', err_age)
 
   # Add weight decay to the loss.
   lGender = tf.math.scalar_mul(params['kGender'], cross_entropy)
-  lAge = tf.math.scalar_mul(params['kAge'], loss_mse)
+  lAge = tf.math.scalar_mul(params['kAge'], err_age)
   #with tf.variable_scope("total_loss"):
   loss = tf.math.add( lGender, lAge, name='loss')
 
@@ -370,8 +368,14 @@ def resnetv2_model_fn(features, labels, mode, params):
                'accuracy_gender': accuracy_gender,
                'mean_iou_gender': mean_iou,
               }
-
-  #  return tf.estimator.EstimatorSpec(mode, predictions=predictions, loss=loss, eval_metric_ops=metrics)
+  
+    # Call the training rewrite which rewrites the graph in-place with
+  # FakeQuantization nodes and folds batchnorm for training. It is
+  # often needed to fine tune a floating point model for quantization
+  # with this training tool. When training from scratch, quant_delay
+  # can be used to activate quantization after training to converge
+  # with the float graph, effectively fine-tuning the model.
+  #tf.contrib.quantize.create_training_graph(input_graph=loss, quant_delay=2000000)
 
   #if mode == tf.estimator.ModeKeys.TRAIN:
   optimizer = tf.train.AdamOptimizer(params['learning_rate'])

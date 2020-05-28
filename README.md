@@ -11,7 +11,7 @@ Dataset: https://data.vision.ee.ethz.ch/cvl/rrothe/imdb-wiki/
    > docker run --gpus '"device=0"' -it --rm -v "$(pwd):/app" -v "/store:/store" -p 6006:6006/tcp -p 5000:5000/tcp -p 3000:3000 ec:latest
 
 1. Run runtime docker image
-   > docker run --device=/dev/video0:/dev/video0 --gpus '"device=0"' -it --rm -v "$(pwd):/app" -v "/store:/store" -p 6006:6006/tcp -p 5000:5000/tcp -p 3000:3000 ec:latest
+   > 
 
 1. In docker container, convert dataset into record:
    > python makecrecord.py
@@ -29,9 +29,10 @@ Dataset: https://data.vision.ee.ethz.ch/cvl/rrothe/imdb-wiki/
 1. Target Jetson:
 
 ## Test on Google Corel Board:
-1. https://coral.ai/docs/dev-board/get-started/   
-
-
+1. Set up Coral [Edge TPU](https://coral.ai/docs/dev-board/get-started/)
+1. Train model with TensorFlow 1.15 until Edge TPU compiler supports Tensorflow 2.0
+1. Quantize trained model to int8 [](https://www.tensorflow.org/lite/convert/python_api)
+1. [Quatization aware training](https://github.com/tensorflow/tensorflow/tree/r1.13/tensorflow/contrib/quantize)
 
 
 

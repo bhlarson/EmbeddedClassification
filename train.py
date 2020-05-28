@@ -9,9 +9,9 @@ import os
 import sys
 import shutil
 import glob
-
+from datetime import datetime
 import tensorflow as tf
-
+import numpy as np
 import resnet_modelv2 as resnet_model
 from tensorflow.python import debug as tf_debug
 from tensorboard import program
@@ -27,7 +27,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--model_dir', type=str, default='./model',
                     help='Base directory for the model.')
 
-parser.add_argument('--train_epochs', type=int, default=20,
+parser.add_argument('--train_epochs', type=int, default=1,
                     help='Number of training epochs: '
                          'For 30K iteration with batch size 6, train_epoch = 17.01 (= 30K * 6 / 10,582). '
                          'For 30K iteration with batch size 8, train_epoch = 22.68 (= 30K * 8 / 10,582). '

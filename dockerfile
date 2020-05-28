@@ -26,7 +26,8 @@ RUN pip3 --no-cache-dir install \
         matplotlib==3.2.1 \
         datetime==4.3 \
         flask==1.1.1 \
-        tf2onnx
+        scikit-learn==0.23.1 \
+        tqdm
 
 WORKDIR /app
 ENV LANG C.UTF-8

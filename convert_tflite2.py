@@ -13,8 +13,8 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument('--debug', action='store_true', help='Wait for debugger attach')
 
-parser.add_argument('--inmodel', type=str, default='./saved_model/1590207806', help='Model path')
-parser.add_argument('--outmodel', type=str, default='./tflite/1590207806_int8.tflite', help='Model path')
+parser.add_argument('--inmodel', type=str, default='./saved_model/1590151212', help='Model path')
+parser.add_argument('--outmodel', type=str, default='./tflite/1590151212_int8.tflite', help='Model path')
 
 parser.add_argument('--data_dir', type=str, default='/store/Datasets/imdb/imdb_crop/18', help='Path to data directory ')
 parser.add_argument('--match', type=str, default='*', help='File wildcard')
@@ -46,16 +46,18 @@ def representative_dataset_gen(files, steps = 25):
 def main(FLAGS):
     files = get_filenames(FLAGS.data_dir, FLAGS.match)
 
-    converter = tf.lite.TFLiteConverter.from_saved_model('./saved_model/1590207806')
+    converter = tf.lite.TFLiteConverter.from_saved_model('./saved_model/1590151212')
     converter.optimizations = [tf.lite.Optimize.OPTIMIZE_FOR_LATENCY]
 
+    #converter.representative_dataset = representative_dataset_gen
+    converter.representative_dataset = representative_dataset_gen
     converter.representative_dataset = lambda:representative_dataset_gen(files)
     converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
-    converter.inference_input_type = tf.uint8  # or tf.uint8
-    converter.inference_output_type = tf.uint8  # or tf.uint8
+    converter.inference_input_type = tf.int8  # or tf.uint8
+    converter.inference_output_type = tf.int8  # or tf.uint8
     tflite_model = converter.convert()
-    open("./tflite/1590207806_int8.tflite", "wb").write(tflite_model)
-    stream = os.popen('edgetpu_compiler ./tflite/1590207806_int8.tflite -o ./etpu')
+    open("./tflite/1590151212_int8.tflite", "wb").write(tflite_model)
+    stream = os.popen('edgetpu_compiler ./tflite/1590151212_int8.tflite -o ./etpu')
     compileout = stream.read()
     print(compileout)
     

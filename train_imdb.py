@@ -9,14 +9,14 @@ import os
 import sys
 import shutil
 import glob
-
+import cv2
 import tensorflow as tf
-
+from datetime import datetime
 import resnet_model
 from utils import preprocessing
 from tensorflow.python import debug as tf_debug
 from tensorboard import program
-
+import numpy as np
 print('Python Version {}'.format(sys.version))
 print('Tensorflow version {}'.format(tf.__version__))
 print('GPU Available: {}'.format(tf.test.is_gpu_available()))
@@ -25,10 +25,11 @@ if(tf.test.is_gpu_available()):
 
 parser = argparse.ArgumentParser()
 
+defaultname =  '{}-lit'.format(datetime.today().strftime('%Y-%m-%d-%H-%M-%S'))
 parser.add_argument('--model_dir', type=str, default='./model',
                     help='Base directory for the model.')
 
-parser.add_argument('--train_epochs', type=int, default=20,
+parser.add_argument('--train_epochs', type=int, default=500,
                     help='Number of training epochs: '
                          'For 30K iteration with batch size 6, train_epoch = 17.01 (= 30K * 6 / 10,582). '
                          'For 30K iteration with batch size 8, train_epoch = 22.68 (= 30K * 8 / 10,582). '
@@ -90,10 +91,13 @@ parser.add_argument('--weight_decay', type=float, default=2e-4,
 parser.add_argument('--debug_hooks', action='store_true',
                     help='Whether to use debugger to track down bad values during training.')
 
-parser.add_argument('--resnet_size', type=int, default=18,
+parser.add_argument('--resnet_size', type=int, default=50,
                     help='Resnet size (18, 34, 50, 101, 152, 200)')
 
 parser.add_argument('--tbport', type=str, default='6006', help='Tensorboard network port.')
+# Tensorflowlite conversion
+parser.add_argument('--sample_dir', type=str, default='/store/Datasets/imdb/imdb_crop/18', help='Path to data directory ')
+parser.add_argument('--match', type=str, default='*', help='File wildcard')
 
 parser.add_argument('--clean_model_dir', action='store_true', help='If present, deletes the model directory when starting.')
 parser.add_argument('--saveonly', action='store_true', help='True, enable debug and stop at breakpoint')
@@ -117,6 +121,17 @@ _NUM_IMAGES = {
     'validation': 1449,
 }
 
+def get_samples(data_dir, ext):
+    """Return a list of filenames.
+
+    Args:
+        is_training: A boolean denoting whether the input is for training.
+        data_dir: path to the the directory containing the input data.
+
+    Returns:
+        A list of file names.
+    """
+    return glob.glob(os.path.join(data_dir, ext))
 
 def get_filenames(is_training, data_dir):
   """Return a list of filenames.
@@ -164,7 +179,6 @@ def parse_record(raw_record):
 
   return image, label
 
-
 def preprocess_image(image, label, is_training):
   """Preprocess a single image of layout [height, width, depth]."""
   '''if is_training:
@@ -182,6 +196,9 @@ def preprocess_image(image, label, is_training):
 
     image.set_shape([_HEIGHT, _WIDTH, 3])
     label.set_shape([_HEIGHT, _WIDTH, 1])'''
+
+  if is_training:
+      image = tf.image.random_flip_left_right(image)
 
   #tf.image.resize_with_crop_or_pad(image, _HEIGHT, _WIDTH)
 
@@ -238,6 +255,14 @@ def serving_input_receiver_fn():
     image = tf.placeholder(dtype=tf.float32, shape=shape, name='input_image')
     images = tf.expand_dims(image, 0)
     return tf.estimator.export.TensorServingInputReceiver(images, image)
+
+def representative_dataset_gen(files, steps = 25):
+  
+  for i in range(steps):
+
+    img = cv2.imread(files[i])
+    img = cv2.resize(img,(_WIDTH,_HEIGHT))
+    yield [img.astype(np.float32)]
 
 def main(unused_argv):
 
@@ -329,7 +354,23 @@ def main(unused_argv):
 
   #savedmodel = model.export_saved_model('saved_model', serving_input_fn())
   savedmodel = model.export_saved_model('saved_model', serving_input_receiver_fn, experimental_mode=tf.estimator.ModeKeys.PREDICT, as_text=True)
-  print('{} saved'.format(savedmodel.decode('utf-8'))) 
+  savedmodelpath = savedmodel.decode('utf-8')
+  print('{} saved'.format(savedmodelpath))
+
+  converter = tf.lite.TFLiteConverter.from_saved_model(savedmodelpath)
+  converter.optimizations = [tf.lite.Optimize.OPTIMIZE_FOR_LATENCY]
+  samplefiles = get_samples(FLAGS.sample_dir, FLAGS.match)
+  converter.representative_dataset = lambda:representative_dataset_gen(samplefiles)
+  converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
+  converter.inference_input_type = tf.uint8  # or tf.uint8
+  converter.inference_output_type = tf.uint8  # or tf.uint8
+  tflite_model = converter.convert()
+  outflite = './tflite/{}_int8.tflite'.format(defaultname)
+  open(outflite, "wb").write(tflite_model)
+  edgetpu_compile = 'edgetpu_compiler {} -o ./etpu'.format(outflite)
+  stream = os.popen(edgetpu_compile)
+  compileout = stream.read()
+  print(compileout)
 
 if __name__ == '__main__':
   FLAGS, unparsed = parser.parse_known_args()
