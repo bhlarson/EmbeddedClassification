@@ -14,7 +14,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--debug', action='store_true',help='Wait for debugge attach')
 parser.add_argument('--model', 
                     #type=str, default='./tflite/1589806577_int8.tflite',
-                    type=str, default='./etpu/1589806577_int8_edgetpu.tflite',
+                    type=str, default='./etpu/2020-05-28-02-16-08-lit_int8_edgetpu.tflite',
                     help='Path to model')
 
 EDGETPU_SHARED_LIB = {
@@ -65,11 +65,12 @@ def gen(camera):
         cv2.rectangle(img,p1,p2,color,thickness)
 
         before = datetime.now()
-        crop = cv2.resize(img[p1[1]:p2[1], p1[0]:p2[0]],(_WIDTH,_HEIGHT)).astype(np.float32)
+        crop = cv2.resize(img[p1[1]:p2[1], p1[0]:p2[0]],(_WIDTH,_HEIGHT))
 
         interpreter.set_tensor(input_details[0]['index'], crop)
         interpreter.invoke()
-        pred_age = interpreter.get_tensor(output_details[0]['index'])[0][0]
+        pred_age = output_details[0]['quantization'][0]*interpreter.get_tensor(output_details[0]['index'])[0][0]
+        pred_age = int(round(pred_age))
         pred_gender = interpreter.get_tensor(output_details[1]['index'])[0]
 
 
@@ -79,7 +80,7 @@ def gen(camera):
         results = 'Age {}, Genderender {}, '.format(pred_age,pred_gender)
         dt = datetime.now()-before
 
-        resultsDisplay = '{:.3f}s Age {}, Gender {}, '.format(dt.total_seconds(), pred_age,gender)
+        resultsDisplay = '{:.3f}s Age {}, Gender {}'.format(dt.total_seconds(), pred_age,gender)
 
         print(results)
         font = cv2.FONT_HERSHEY_SIMPLEX
