@@ -63,22 +63,21 @@ def gen(camera):
         p2 = tuple((center+d).astype(int))
         p2 = (min(p2[0],imgShape[0]-1),min(p2[1],imgShape[1]-1))
         cv2.rectangle(img,p1,p2,color,thickness)
-
-        before = datetime.now()
         crop = cv2.resize(img[p1[1]:p2[1], p1[0]:p2[0]],(_WIDTH,_HEIGHT))
 
+        before = datetime.now()
         interpreter.set_tensor(input_details[0]['index'], crop)
         interpreter.invoke()
         pred_age = output_details[0]['quantization'][0]*interpreter.get_tensor(output_details[0]['index'])[0][0]
         pred_age = int(round(pred_age))
         pred_gender = interpreter.get_tensor(output_details[1]['index'])[0]
-
+        dt = datetime.now()-before
 
         gender = 'male'
         if(pred_gender < 1):
             gender = 'female'
         results = 'Age {}, Genderender {}, '.format(pred_age,pred_gender)
-        dt = datetime.now()-before
+
 
         resultsDisplay = '{:.3f}s Age {}, Gender {}'.format(dt.total_seconds(), pred_age,gender)
 
