@@ -9,8 +9,9 @@ import os
 import sys
 import shutil
 import glob
-from datetime import datetime
+import cv2
 import tensorflow as tf
+from datetime import datetime
 import numpy as np
 import resnet_modelv2 as resnet_model
 from tensorflow.python import debug as tf_debug
@@ -24,10 +25,11 @@ if(tf.test.is_gpu_available()):
 
 parser = argparse.ArgumentParser()
 
+defaultname =  '{}-lit'.format(datetime.today().strftime('%Y-%m-%d-%H-%M-%S'))
 parser.add_argument('--model_dir', type=str, default='./model',
                     help='Base directory for the model.')
 
-parser.add_argument('--train_epochs', type=int, default=1,
+parser.add_argument('--train_epochs', type=int, default=500,
                     help='Number of training epochs: '
                          'For 30K iteration with batch size 6, train_epoch = 17.01 (= 30K * 6 / 10,582). '
                          'For 30K iteration with batch size 8, train_epoch = 22.68 (= 30K * 8 / 10,582). '
@@ -42,7 +44,7 @@ parser.add_argument('--epochs_per_eval', type=int, default=1,
 parser.add_argument('--tensorboard_images_max_outputs', type=int, default=6,
                     help='Max number of batch elements to generate for Tensorboard.')
 
-parser.add_argument('--batch_size', type=int, default=24,
+parser.add_argument('--batch_size', type=int, default=32,
                     help='Number of examples per batch.')
 
 parser.add_argument('--learning_rate_policy', type=str, default='poly',
@@ -63,7 +65,7 @@ parser.add_argument('--base_architecture', type=str, default='resnet_v2_101',
 
 # Pre-trained models: https://github.com/tensorflow/models/blob/master/research/slim/README.md
 parser.add_argument('--pre_trained_model', type=str, 
-                    #default='/store/training/resnet_v2_101_2017_04_14/resnet_v2_101.ckpt',
+                    default='/store/training/resnet_v2_101_2017_04_14/resnet_v2_101.ckpt',
                     #default='C:\\data\\training\\resnet_v2_101_2017_04_14\\resnet_v2_101.ckpt',
                     help='Path to the pre-trained model checkpoint.')
 
@@ -74,7 +76,7 @@ parser.add_argument('--output_stride', type=int, default=16,
 parser.add_argument('--freeze_batch_norm', action='store_true',
                     help='Freeze batch normalization parameters during the training.')
 
-parser.add_argument('--initial_learning_rate', type=float, default=7e-3,
+parser.add_argument('--initial_learning_rate', type=float, default=1e-5,
                     help='Initial learning rate for the optimizer.')
 
 parser.add_argument('--end_learning_rate', type=float, default=1e-6,
@@ -89,13 +91,16 @@ parser.add_argument('--weight_decay', type=float, default=2e-4,
 parser.add_argument('--debug_hooks', action='store_true',
                     help='Whether to use debugger to track down bad values during training.')
 
-parser.add_argument('--resnet_size', type=int, default=18,
+parser.add_argument('--resnet_size', type=int, default=50,
                     help='Resnet size (18, 34, 50, 101, 152, 200)')
 
 parser.add_argument('--tbport', type=str, default='6006', help='Tensorboard network port.')
+# Tensorflowlite conversion
+parser.add_argument('--sample_dir', type=str, default='/store/Datasets/imdb/imdb_crop/18', help='Path to data directory ')
+parser.add_argument('--match', type=str, default='*', help='File wildcard')
 
 parser.add_argument('--clean_model_dir', action='store_true', help='If present, deletes the model directory when starting.')
-parser.add_argument('--saveonly', type=bool, default=False, help='True, enable debug and stop at breakpoint')
+parser.add_argument('--saveonly', action='store_true', help='True, enable debug and stop at breakpoint')
 parser.add_argument('--debug', action='store_true',help='Wait for debugge attach')
 
 _NUM_CLASSES = 21
@@ -116,6 +121,17 @@ _NUM_IMAGES = {
     'validation': 1449,
 }
 
+def get_samples(data_dir, ext):
+    """Return a list of filenames.
+
+    Args:
+        is_training: A boolean denoting whether the input is for training.
+        data_dir: path to the the directory containing the input data.
+
+    Returns:
+        A list of file names.
+    """
+    return glob.glob(os.path.join(data_dir, ext))
 
 def get_filenames(is_training, data_dir):
   """Return a list of filenames.
@@ -163,8 +179,13 @@ def parse_record(raw_record):
 
   return image, label
 
-
 def preprocess_image(image, label, is_training):
+
+  if is_training:
+      image = tf.image.random_flip_left_right(image)
+
+  #tf.image.resize_with_crop_or_pad(image, _HEIGHT, _WIDTH)
+
   return image, label
 
 
@@ -206,18 +227,20 @@ def input_fn(is_training, data_dir, batch_size, num_epochs=1):
 
   return dataset
 
-'''def serving_input_fn():
-    shape = [_HEIGHT, _WIDTH, _DEPTH]
-    features = {
-        "features" : tf.io.FixedLenFeature(shape=shape, dtype=tf.string),
-    }
-    return tf.estimator.export.build_parsing_serving_input_receiver_fn(features)'''
 
 def serving_input_receiver_fn():
     shape = [_HEIGHT, _WIDTH, _DEPTH]
     image = tf.compat.v1.placeholder(dtype=tf.float32, shape=shape, name='input_image')
     images = tf.expand_dims(image, 0)
     return tf.estimator.export.TensorServingInputReceiver(images, image)
+
+def representative_dataset_gen(files, steps = 25):
+  
+  for i in range(steps):
+
+    img = cv2.imread(files[i])
+    img = cv2.resize(img,(_WIDTH,_HEIGHT))
+    yield [img.astype(np.float32)]
 
 def main(unused_argv):
 
@@ -245,7 +268,7 @@ def main(unused_argv):
           'resnet_size': FLAGS.resnet_size,
           'kGender':50.0,
           'kAge':1.0,
-          'learning_rate':1e-3,
+          'learning_rate':FLAGS.initial_learning_rate,
           'data_format':None,
       }
 
@@ -284,23 +307,6 @@ def main(unused_argv):
         train_hooks.append(debug_hook)
         eval_hooks = [debug_hook]
 
-      '''print("Start training.")
-      model.train(
-          input_fn=lambda: input_fn(True, FLAGS.data_dir, FLAGS.batch_size, FLAGS.epochs_per_eval),
-          hooks=train_hooks,
-          steps=100  # For debug
-      )
-
-      print("Start evaluation.")
-      # Evaluate the model and print results
-      eval_results = model.evaluate(
-          # Batch size must be 1 for testing because the images' size differs
-          input_fn=lambda: input_fn(False, FLAGS.data_dir, 1),
-          hooks=eval_hooks,
-          steps=1  # For debug
-      )
-      print(eval_results)'''
-
       train_spec = tf.estimator.TrainSpec(input_fn=lambda: input_fn(True, FLAGS.data_dir, FLAGS.batch_size, FLAGS.epochs_per_eval) , max_steps=30000000)
       #train_spec = tf.estimator.TrainSpec(input_fn=lambda: input_fn(True, FLAGS.data_dir, FLAGS.batch_size, FLAGS.epochs_per_eval))
       eval_spec = tf.estimator.EvalSpec(input_fn=lambda: input_fn(False, FLAGS.data_dir, 1))
@@ -308,7 +314,23 @@ def main(unused_argv):
       tf.estimator.train_and_evaluate(model, train_spec, eval_spec)
 
   savedmodel = model.export_saved_model('saved_model', serving_input_receiver_fn, experimental_mode=tf.estimator.ModeKeys.PREDICT, as_text=True)
-  print('{} saved'.format(savedmodel.decode('utf-8'))) 
+  savedmodelpath = savedmodel.decode('utf-8')
+  print('{} saved'.format(savedmodelpath))
+
+  converter = tf.lite.TFLiteConverter.from_saved_model(savedmodelpath)
+  converter.optimizations = [tf.lite.Optimize.OPTIMIZE_FOR_LATENCY]
+  samplefiles = get_samples(FLAGS.sample_dir, FLAGS.match)
+  converter.representative_dataset = lambda:representative_dataset_gen(samplefiles)
+  converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
+  converter.inference_input_type = tf.uint8  # or tf.uint8
+  converter.inference_output_type = tf.uint8  # or tf.uint8
+  tflite_model = converter.convert()
+  outflite = './tflite/{}_int8.tflite'.format(defaultname)
+  open(outflite, "wb").write(tflite_model)
+  edgetpu_compile = 'edgetpu_compiler {} -o ./etpu'.format(outflite)
+  stream = os.popen(edgetpu_compile)
+  compileout = stream.read()
+  print(compileout)
 
 if __name__ == '__main__':
   FLAGS, unparsed = parser.parse_known_args()

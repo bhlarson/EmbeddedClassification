@@ -12,11 +12,11 @@ import glob
 import cv2
 import tensorflow as tf
 from datetime import datetime
+import numpy as np
 import resnet_model
-from utils import preprocessing
 from tensorflow.python import debug as tf_debug
 from tensorboard import program
-import numpy as np
+
 print('Python Version {}'.format(sys.version))
 print('Tensorflow version {}'.format(tf.__version__))
 print('GPU Available: {}'.format(tf.test.is_gpu_available()))
@@ -76,7 +76,7 @@ parser.add_argument('--output_stride', type=int, default=16,
 parser.add_argument('--freeze_batch_norm', action='store_true',
                     help='Freeze batch normalization parameters during the training.')
 
-parser.add_argument('--initial_learning_rate', type=float, default=1e-4,
+parser.add_argument('--initial_learning_rate', type=float, default=1e-5,
                     help='Initial learning rate for the optimizer.')
 
 parser.add_argument('--end_learning_rate', type=float, default=1e-6,
@@ -180,22 +180,6 @@ def parse_record(raw_record):
   return image, label
 
 def preprocess_image(image, label, is_training):
-  """Preprocess a single image of layout [height, width, depth]."""
-  '''if is_training:
-    # Randomly scale the image and label.
-    image, label = preprocessing.random_rescale_image_and_label(
-        image, label, _MIN_SCALE, _MAX_SCALE)
-
-    # Randomly crop or pad a [_HEIGHT, _WIDTH] section of the image and label.
-    image, label = preprocessing.random_crop_or_pad_image_and_label(
-        image, label, _HEIGHT, _WIDTH, _IGNORE_LABEL)
-
-    # Randomly flip the image and label horizontally.
-    image, label = preprocessing.random_flip_left_right_image_and_label(
-        image, label)
-
-    image.set_shape([_HEIGHT, _WIDTH, 3])
-    label.set_shape([_HEIGHT, _WIDTH, 1])'''
 
   if is_training:
       image = tf.image.random_flip_left_right(image)
@@ -243,12 +227,6 @@ def input_fn(is_training, data_dir, batch_size, num_epochs=1):
 
   return dataset
 
-'''def serving_input_fn():
-    shape = [_HEIGHT, _WIDTH, _DEPTH]
-    features = {
-        "features" : tf.FixedLenFeature(shape=shape, dtype=tf.string),
-    }
-    return tf.estimator.export.build_parsing_serving_input_receiver_fn(features)'''
 
 def serving_input_receiver_fn():
     shape = [_HEIGHT, _WIDTH, _DEPTH]
@@ -329,30 +307,12 @@ def main(unused_argv):
         train_hooks.append(debug_hook)
         eval_hooks = [debug_hook]
 
-      '''print("Start training.")
-      model.train(
-          input_fn=lambda: input_fn(True, FLAGS.data_dir, FLAGS.batch_size, FLAGS.epochs_per_eval),
-          hooks=train_hooks,
-          steps=100  # For debug
-      )
-
-      print("Start evaluation.")
-      # Evaluate the model and print results
-      eval_results = model.evaluate(
-          # Batch size must be 1 for testing because the images' size differs
-          input_fn=lambda: input_fn(False, FLAGS.data_dir, 1),
-          hooks=eval_hooks,
-          steps=1  # For debug
-      )
-      print(eval_results)'''
-
       train_spec = tf.estimator.TrainSpec(input_fn=lambda: input_fn(True, FLAGS.data_dir, FLAGS.batch_size, FLAGS.epochs_per_eval) , max_steps=30000000)
       #train_spec = tf.estimator.TrainSpec(input_fn=lambda: input_fn(True, FLAGS.data_dir, FLAGS.batch_size, FLAGS.epochs_per_eval))
       eval_spec = tf.estimator.EvalSpec(input_fn=lambda: input_fn(False, FLAGS.data_dir, 1))
 
       tf.estimator.train_and_evaluate(model, train_spec, eval_spec)
 
-  #savedmodel = model.export_saved_model('saved_model', serving_input_fn())
   savedmodel = model.export_saved_model('saved_model', serving_input_receiver_fn, experimental_mode=tf.estimator.ModeKeys.PREDICT, as_text=True)
   savedmodelpath = savedmodel.decode('utf-8')
   print('{} saved'.format(savedmodelpath))

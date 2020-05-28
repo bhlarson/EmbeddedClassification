@@ -331,8 +331,8 @@ def resnetv2_model_fn(features, labels, mode, params):
   tf.summary.scalar('classification_cross_entropy', cross_entropy)
 
   # Regression loss
-  err_age = tf.losses.absolute_difference(tf.expand_dims(labels['age'],1), pred_age)
-  #err_age = tf.losses.mean_squared_error(tf.expand_dims(labels['age'],1), pred_age)
+  #err_age = tf.losses.absolute_difference(tf.expand_dims(labels['age'],1), pred_age)
+  err_age = tf.losses.mean_squared_error(tf.expand_dims(labels['age'],1), pred_age)
 
   # Create a tensor named cross_entropy for logging purposes.
   tf.identity(err_age, name='err_age')
