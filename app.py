@@ -11,7 +11,7 @@ from datetime import datetime
 parser = argparse.ArgumentParser()
 
 parser.add_argument('--debug', action='store_true',help='Wait for debugge attach')
-parser.add_argument('--model', type=str, default='./saved_model/1590410988',
+parser.add_argument('--model', type=str, default='./saved_model/1590670812',
                     help='Base directory for the model.')
 
 
@@ -31,8 +31,8 @@ def index():
 def gen(camera):
     """Video streaming generator function."""
 
-    loaded = tf.saved_model.load_v2(FLAGS.model)
-    #loaded = tf.saved_model.load(FLAGS.model)
+    #loaded = tf.saved_model.load_v2(FLAGS.model)
+    loaded = tf.saved_model.load(FLAGS.model)
     print(list(loaded.signatures.keys()))
     infer = loaded.signatures["serving_default"]
     print(infer.structured_outputs)
@@ -53,19 +53,21 @@ def gen(camera):
         p2 = tuple((center+d).astype(int))
         p2 = (min(p2[0],imgShape[0]-1),min(p2[1],imgShape[1]-1))
         cv2.rectangle(img,p1,p2,color,thickness)
+        crop = cv2.resize(img[p1[1]:p2[1], p1[0]:p2[0]],(_WIDTH,_HEIGHT)).astype(np.float32)
 
         before = datetime.now()
-        crop = cv2.resize(img[p1[1]:p2[1], p1[0]:p2[0]],(_WIDTH,_HEIGHT))
+
         outputs = infer(tf.constant(crop))
         gender = 'male'
         pred_gender = np.squeeze(outputs['pred_gender'].numpy())
         pred_age = np.squeeze(outputs['pred_age'].numpy())
-        
+        dt = datetime.now()-before
+
         outputs['pred_age'].numpy()
         if(outputs['pred_gender'].numpy()[0] < 1):
             gender = 'female'
         results = 'Age {}, Genderender {}, '.format(outputs['pred_age'].numpy()[0,0],outputs['pred_gender'].numpy()[0])
-        dt = datetime.now()-before
+
 
         resultsDisplay = '{:.3f}s Age {}, Gender {}, '.format(dt.total_seconds(), int(round(outputs['pred_age'].numpy()[0,0])),gender)
 

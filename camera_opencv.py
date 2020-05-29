@@ -11,7 +11,7 @@ class Camera(BaseCamera):
 
     @staticmethod
     def frames():
-        for i in range(Camera.video_source,Camera.video_source+2):
+        for i in range(Camera.video_source,Camera.video_source+4):
             camera = cv2.VideoCapture(i)
             if camera.isOpened():
                 break
